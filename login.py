@@ -18,7 +18,7 @@ class StringGenerator(object):
     def register(self, username, password, work_id):
         #in the future need to have length checks for params
         with sqlite3.connect(DB_STRING) as c:
-            c.execute("INSERT INTO user_string VALUES (?, ?, ?, ?)",
+            c.execute("INSERT INTO user_string(session_id, username, password, work_id) VALUES (?,?,?,?)",
             [cherrypy.session.id, username, password, work_id])
         return open('home.html').read().format(name=username,sid=cherrypy.session.id)
 
@@ -40,8 +40,9 @@ def setup_database():
     Create the user_string table in the database on server startup
     """
     with sqlite3.connect(DB_STRING) as con:
-        con.execute("CREATE TABLE user_string (session_id, username, password, work_id)")
-
+        con.execute("CREATE TABLE user_string (user_id INTEGER PRIMARY KEY, session_id, username, password, work_id)")
+        # move session_id out of this table later (does not belong in user info)
+        # draw up the relational db with keys
 
 def cleanup_database():
     """
