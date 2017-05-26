@@ -2,6 +2,9 @@ import os
 import os.path
 import sqlite3
 import string
+import urllib
+import urllib2
+import hashlib
 
 import cherrypy
 from cherrypy.lib import auth_digest
@@ -10,6 +13,9 @@ DB_STRING = "users.db"
 
 
 class StringGenerator(object):
+    #TODO: need to pass username and password as class variables? so we can reuse, esp. for getList
+    #getList shouldn't need a form to input creds again. we need to store username and password creds
+    #from /report to use in authenticating getList.
     @cherrypy.expose
     def index(self):
         return file('index.html')
@@ -21,6 +27,35 @@ class StringGenerator(object):
             c.execute("INSERT INTO user_string(session_id, username, password, work_id) VALUES (?,?,?,?)",
             [cherrypy.session.id, username, password, work_id])
         return open('home.html').read().format(name=username,sid=cherrypy.session.id)
+
+    @cherrypy.expose
+    def report(self, username, password, location=1, ip='202.36.244.13', port=80):
+        hashedPassword = hash(password)  # call hash function for SHA256 encryption
+        auth = self.authoriseUserLogin(username, hashedPassword, location, ip, port)
+        error_code,error_message = auth.split(",")
+        if (error_code == '0'):  # successful login
+            cherrypy.session['username'] = username
+            raise cherrypy.HTTPRedirect('/home.html')
+        else:
+            raise cherrypy.HTTPRedirect('/')  # javascript handles 'try again'
+
+    @cherrypy.expose
+    def getList(self, username, password, enc=0, json=0):
+        hashedPassword = hash(password)
+        auth = self.authoriseGetList(username, hashedPassword, enc, json)
+        return auth
+
+
+    def authoriseUserLogin(self,username, password, location, ip, port):
+        params = {'username':username, 'password':password, 'location':location, 'ip':ip, 'port':port}
+        full_url = 'http://cs302.pythonanywhere.com/report?' + urllib.urlencode(params) # converts to format &a=b&c=d...
+        return urllib2.urlopen(full_url).read()
+
+    def authoriseGetList(self, username, password, enc, json):
+        params = {'username':username, 'password':password, 'enc':enc, 'json':json}
+        full_url = 'http://cs302.pythonanywhere.com/getList?' + urllib.urlencode(params)
+        return urllib2.urlopen(full_url).read()
+
 
 
 """class StringGeneratorWebService(object):
@@ -51,6 +86,13 @@ def cleanup_database():
     """
     with sqlite3.connect(DB_STRING) as con:
         con.execute("DROP TABLE user_string")
+
+# HASHING ALGORITHM - SHA256
+def hash(str):
+    hashed_str = hashlib.sha256(str + 'COMPSYS302-2017').hexdigest() #hexdigest returns hex in string form, use digest for byte form
+    return hashed_str
+
+
 
 
 conf = {

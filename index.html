@@ -17,10 +17,21 @@
       <button type = "submit">REGISTER</button>
       <p class="message">Already registered? <a href="#">Sign In</a></p>
     </form>
-    <form class="login-form" method = "post" action = "signin">
-      <input type="text" placeholder="username"/>
-      <input type="password" placeholder="password"/>
+    <form class="login-form" method = "post" action = "/report/">
+      <input type="text" placeholder="username" name = "username"/>
+      <input type="password" placeholder="password" name = "password"/>
       <button type = "submit">LOGIN</button>
+      <span id ="login_failed">
+        <script>
+        var login_success = false;
+        if (login_success == false) {
+          document.getElementById("login_failed").innerHTML = "Login Failed. Try again!";
+        }
+        else {
+          window.location = "/home.html";
+        }
+        </script>
+      </span>
       <p class="message">Not registered? <a href="#">Create an account</a></p>
     </form>
   </div>
