@@ -21,24 +21,11 @@
       <input type="text" placeholder="username" name = "username"/>
       <input type="password" placeholder="password" name = "password"/>
       <button type = "submit">LOGIN</button>
-      <span id ="login_failed">
-        <script>
-        var login_success = false;
-        if (login_success == false) {
-          document.getElementById("login_failed").innerHTML = "Login Failed. Try again!";
-        }
-        else {
-          window.location = "/home.html";
-        }
-        </script>
-      </span>
-      <p class="message">Not registered? <a href="#">Create an account</a></p>
+      <!-- Login failed. try again prompt -->
+      <br><br>
+      <div style = "color:red; font-style:italic; font-weight:bold;">LOGIN_STATUS</div>
     </form>
   </div>
 </div>
-  <script src='http://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.3/jquery.min.js'></script>
-
-    <script src="js/index.js"></script>
-
 </body>
 </html>

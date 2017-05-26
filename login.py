@@ -5,11 +5,15 @@ import string
 import urllib
 import urllib2
 import hashlib
+import sched
+import time
 
 import cherrypy
 from cherrypy.lib import auth_digest
 
 DB_STRING = "users.db"
+logged_on = 0  # 0 = never tried to log on, 1 = success, 2 = tried and failed
+
 
 
 class StringGenerator(object):
@@ -18,7 +22,26 @@ class StringGenerator(object):
     #from /report to use in authenticating getList.
     @cherrypy.expose
     def index(self):
-        return file('index.html')
+        f = open("index.html", "r")
+        data = f.read()
+        f.close()
+        # need conditional to show error message if login failed
+        if (logged_on == 2):  # 2 shows up if a failed login attempt has been made
+            data = data.replace("LOGIN_STATUS", "An invalid username or password was entered. Please try again.")
+        else:  # if no login attempt has been made or login successful, do not show prompt
+            data = data.replace("LOGIN_STATUS", "")
+
+        return data
+
+    @cherrypy.expose
+    def home(self):
+        f = open("home.html", "r")
+        data = f.read()
+        f.close()
+        data = data.replace("USER_NAME", cherrypy.session['username'])
+        data = data.replace("SESSION_ID", cherrypy.session.id)
+        s = sched.scheduler(time.time, time.sleep)
+        return data
 
     @cherrypy.expose
     def register(self, username, password, work_id):
@@ -33,27 +56,34 @@ class StringGenerator(object):
         hashedPassword = hash(password)  # call hash function for SHA256 encryption
         auth = self.authoriseUserLogin(username, hashedPassword, location, ip, port)
         error_code,error_message = auth.split(",")
-        if (error_code == '0'):  # successful login
+        if (error_code == '0'):  # successful login, populate session variables
+            global logged_on
+            logged_on = 1
             cherrypy.session['username'] = username
-            raise cherrypy.HTTPRedirect('/home.html')
+            cherrypy.session['password'] = hashedPassword  # is this safe?
+            cherrypy.session['location'] = location
+            cherrypy.session['ip'] = ip
+            cherrypy.session['port'] = port
+            cherrypy.session['enc'] = 0  # change these later if deciding to use enc/json/etc.
+            cherrypy.session['json'] = 0
+            raise cherrypy.HTTPRedirect('/home')
         else:
-            raise cherrypy.HTTPRedirect('/')  # javascript handles 'try again'
+            global logged_on
+            logged_on = 2
+            raise cherrypy.HTTPRedirect('/')  # set flag to change /index function
 
     @cherrypy.expose
-    def getList(self, username, password, enc=0, json=0):
-        hashedPassword = hash(password)
-        auth = self.authoriseGetList(username, hashedPassword, enc, json)
-        return auth
+    def getList(self):
+        params = {'username':cherrypy.session['username'], 'password':cherrypy.session['password'],
+                  'enc':cherrypy.session['enc'], 'json':cherrypy.session['json']}
+        full_url = 'http://cs302.pythonanywhere.com/getList?' + urllib.urlencode(params)
+        api_call = urllib2.urlopen(full_url).read()
+        return api_call
 
 
     def authoriseUserLogin(self,username, password, location, ip, port):
         params = {'username':username, 'password':password, 'location':location, 'ip':ip, 'port':port}
-        full_url = 'http://cs302.pythonanywhere.com/report?' + urllib.urlencode(params) # converts to format &a=b&c=d...
-        return urllib2.urlopen(full_url).read()
-
-    def authoriseGetList(self, username, password, enc, json):
-        params = {'username':username, 'password':password, 'enc':enc, 'json':json}
-        full_url = 'http://cs302.pythonanywhere.com/getList?' + urllib.urlencode(params)
+        full_url = 'http://cs302.pythonanywhere.com/report?' + urllib.urlencode(params)  #  converts to format &a=b&c=d...
         return urllib2.urlopen(full_url).read()
 
 
@@ -113,3 +143,13 @@ if __name__ == '__main__':
     cherrypy.engine.subscribe('start', setup_database)
     cherrypy.engine.subscribe('stop', cleanup_database)
     cherrypy.quickstart(StringGenerator(), '/', conf)
+    #this shit probably doesn't work
+    def reportUpdate(s):
+        while (logged_on == 1): # call report once a minute with session credentials
+            report(cherrypy.session['username'], cherrypy.session['password'],
+            cherrypy.session['location'],cherrypy.session['ip'],cherrypy.session['port'])
+            print("reported.")
+            s.enter(1, 1, reportUpdate, ())
+
+    s.enter(1, 1, reportUpdate, ())
+    s.run()
