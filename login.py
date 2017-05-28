@@ -17,9 +17,7 @@ logged_on = 0  # 0 = never tried to log on, 1 = success, 2 = tried and failed
 
 
 class StringGenerator(object):
-    #TODO: need to pass username and password as class variables? so we can reuse, esp. for getList
-    #getList shouldn't need a form to input creds again. we need to store username and password creds
-    #from /report to use in authenticating getList.
+
     @cherrypy.expose
     def index(self):
         f = open("index.html", "r")
@@ -40,6 +38,7 @@ class StringGenerator(object):
         f.close()
         data = data.replace("USER_NAME", cherrypy.session['username'])
         data = data.replace("SESSION_ID", cherrypy.session.id)
+        data = data.replace("USERS_ONLINE", self.getList())
         s = sched.scheduler(time.time, time.sleep)
         return data
 
@@ -78,7 +77,31 @@ class StringGenerator(object):
                   'enc':cherrypy.session['enc'], 'json':cherrypy.session['json']}
         full_url = 'http://cs302.pythonanywhere.com/getList?' + urllib.urlencode(params)
         api_call = urllib2.urlopen(full_url).read()
-        return api_call
+        error_code = api_call[0] # error code is always first character in string
+        api_format = api_call.replace("0, Online user list returned", "") # remove irrelevant text
+        users_online = api_format.count(',') / 4 # db must insert users_online amount of times
+        cherrypy.session['users_online'] = users_online
+        if (error_code == '0'):
+            for i in range(0, users_online):
+                data = api_format.split() # split each user into different list element
+                username,location,ip,port,epoch_time = data[i].split(",",4)
+                with sqlite3.connect(DB_STRING) as c:
+                     c.execute("INSERT INTO user_string(username, location, ip, port, lastlogin) VALUES (?,?,?,?,?)",
+                     [username, location, ip, port, epoch_time])
+            return str(users_online)
+        else:
+            return api_call
+
+    @cherrypy.expose
+    def logoff(self):
+        params = {'username':cherrypy.session['username'], 'password':cherrypy.session['password']}
+        full_url = 'http://cs302.pythonanywhere.com/logoff?' + urllib.urlencode(params)
+        api_call = urllib2.urlopen(full_url).read()
+        error_code = api_call[0]
+        if (error_code == '0'):
+            return "Logged out successfully!"
+        else:
+            return api_call
 
 
     def authoriseUserLogin(self,username, password, location, ip, port):
@@ -87,29 +110,15 @@ class StringGenerator(object):
         return urllib2.urlopen(full_url).read()
 
 
-
-"""class StringGeneratorWebService(object):
-    exposed = True
-    purely for RESTful principles.
-    To create a resource on the server, use POST.
-    To retrieve a resource, use GET.
-    To change the state of a resource or to update it, use PUT.
-    To remove or delete a resource, use DELETE.
-
-    implement later if i can
-    @cherrypy.tools.accept(media='text/plain')"""
-
-
-def setup_database():
+def setup_users_database():
     """
     Create the user_string table in the database on server startup
     """
     with sqlite3.connect(DB_STRING) as con:
-        con.execute("CREATE TABLE user_string (user_id INTEGER PRIMARY KEY, session_id, username, password, work_id)")
-        # move session_id out of this table later (does not belong in user info)
-        # draw up the relational db with keys
+        con.execute("CREATE TABLE user_string (user_id INTEGER PRIMARY KEY, username, location, ip, port, lastlogin)")
+        # add public key argument to this later when required
 
-def cleanup_database():
+def cleanup_users_database():
     """
     Destroy 'user_string' table when server shuts down.
     Maybe take this out later.
@@ -140,16 +149,16 @@ conf = {
 
 if __name__ == '__main__':
     cherrypy.config.update({'server.socket_port': 8080})
-    cherrypy.engine.subscribe('start', setup_database)
-    cherrypy.engine.subscribe('stop', cleanup_database)
+    cherrypy.engine.subscribe('start', setup_users_database)
+    cherrypy.engine.subscribe('stop', cleanup_users_database)
     cherrypy.quickstart(StringGenerator(), '/', conf)
-    #this shit probably doesn't work
-    def reportUpdate(s):
-        while (logged_on == 1): # call report once a minute with session credentials
-            report(cherrypy.session['username'], cherrypy.session['password'],
-            cherrypy.session['location'],cherrypy.session['ip'],cherrypy.session['port'])
-            print("reported.")
-            s.enter(1, 1, reportUpdate, ())
-
-    s.enter(1, 1, reportUpdate, ())
-    s.run()
+    # this shit probably doesn't work
+    # def reportUpdate(s):
+    #     while (logged_on == 1): # call report once a minute with session credentials
+    #         report(cherrypy.session['username'], cherrypy.session['password'],
+    #         cherrypy.session['location'],cherrypy.session['ip'],cherrypy.session['port'])
+    #         print("reported.")
+    #         s.enter(1, 1, reportUpdate, ())
+    #
+    # s.enter(1, 1, reportUpdate, ())
+    # s.run()
