@@ -10,11 +10,13 @@ import time
 
 import cherrypy
 from cherrypy.lib import auth_digest
+import inbound_comms
 
 DB_STRING = "users.db"
 logged_on = 0  # 0 = never tried to log on, 1 = success, 2 = tried and failed
 
-
+listen_ip = "202.36.244.13"
+listen_port = "10001"
 
 class StringGenerator(object):
 
@@ -39,6 +41,7 @@ class StringGenerator(object):
         data = data.replace("USER_NAME", cherrypy.session['username'])
         data = data.replace("SESSION_ID", cherrypy.session.id)
         data = data.replace("USERS_ONLINE", self.getList())
+        data = data.replace("LIST_OF_USERS", self.showList())
         s = sched.scheduler(time.time, time.sleep)
         return data
 
@@ -51,7 +54,7 @@ class StringGenerator(object):
         return open('home.html').read().format(name=username,sid=cherrypy.session.id)
 
     @cherrypy.expose
-    def report(self, username, password, location=1, ip='202.36.244.13', port=80):
+    def report(self, username, password, location=1, ip=listen_ip, port=listen_port):
         hashedPassword = hash(password)  # call hash function for SHA256 encryption
         auth = self.authoriseUserLogin(username, hashedPassword, location, ip, port)
         error_code,error_message = auth.split(",")
@@ -80,7 +83,7 @@ class StringGenerator(object):
         error_code = api_call[0] # error code is always first character in string
         api_format = api_call.replace("0, Online user list returned", "") # remove irrelevant text
         users_online = api_format.count(',') / 4 # db must insert users_online amount of times
-        cherrypy.session['users_online'] = users_online
+        username_list = [None] * users_online
         if (error_code == '0'):
             for i in range(0, users_online):
                 data = api_format.split() # split each user into different list element
@@ -88,9 +91,19 @@ class StringGenerator(object):
                 with sqlite3.connect(DB_STRING) as c:
                      c.execute("INSERT INTO user_string(username, location, ip, port, lastlogin) VALUES (?,?,?,?,?)",
                      [username, location, ip, port, epoch_time])
-            return str(users_online)
+            return str(users_online) + " users online currently, they are:"
         else:
             return api_call
+
+    @cherrypy.expose
+    def showList(self):
+        c = sqlite3.connect(DB_STRING)
+        cur = c.cursor()
+        cur.execute("SELECT username FROM user_string")
+        user_list = cur.fetchall()
+        string = str(user_list).strip('[]').replace("(u'","").replace("',)","") #  remove extra formatting from being a tuple of tuples
+        return string
+
 
     @cherrypy.expose
     def logoff(self):
@@ -131,9 +144,6 @@ def hash(str):
     hashed_str = hashlib.sha256(str + 'COMPSYS302-2017').hexdigest() #hexdigest returns hex in string form, use digest for byte form
     return hashed_str
 
-
-
-
 conf = {
         '/': {
             'tools.sessions.on': True,
@@ -148,10 +158,16 @@ conf = {
     }
 
 if __name__ == '__main__':
-    cherrypy.config.update({'server.socket_port': 8080})
+    cherrypy.config.update({'server.socket_host': listen_ip,
+                            'server.socket_port': listen_port,
+                            'engine.autoreload.on': True,
+                           })
     cherrypy.engine.subscribe('start', setup_users_database)
     cherrypy.engine.subscribe('stop', cleanup_users_database)
-    cherrypy.quickstart(StringGenerator(), '/', conf)
+    # cherrypy.quickstart(StringGenerator(), '/', conf)
+    cherrypy.tree.mount(StringGenerator(), '/', conf)
+    cherrypy.engine.start()
+    cherrypy.engine.block()
     # this shit probably doesn't work
     # def reportUpdate(s):
     #     while (logged_on == 1): # call report once a minute with session credentials
