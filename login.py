@@ -45,7 +45,6 @@ class MainApp(object):
         data = data.replace("USERS_ONLINE", self.getList())
         data = data.replace("LIST_OF_USERS", self.showList())
         data = data.replace("MESSAGE_LIST", self.displayMessage())
-        s = sched.scheduler(time.time, time.sleep)
         return data
 
     @cherrypy.expose
@@ -70,6 +69,19 @@ class MainApp(object):
             logged_on = 2
             raise cherrypy.HTTPRedirect('/')  # set flag to change /index function
 
+    @cherrypy.expose
+    def listUsers(self):
+        url = 'http://cs302.pythonanywhere.com/listUsers'
+        api_call = urllib2.urlopen(url).read()
+        total_users_list = api_call.split(",")
+        total_users = len(total_users_list)
+        print total_users_list
+        for i in range(0, total_users):
+            with sqlite3.connect(DB_STRING) as c:
+                 c.execute("INSERT INTO total_users(username) VALUES (?)",
+                 [total_users_list[i]])
+        return "There are " + str(total_users) + " current users. \n" + str(total_users_list)
+    
     @cherrypy.expose
     def getList(self):
         with sqlite3.connect(DB_STRING) as c:
@@ -125,10 +137,14 @@ class MainApp(object):
         return '0'
 
     @cherrypy.expose
+    def listAPI(self):
+        return '/ping /listAPI /receiveMessage [sender] [destination] [message] [stamp]'
+
+    @cherrypy.expose
     def receiveMessage(self, sender, destination, message, stamp=int(time.time())): # opt args: markdown, encoding, ecnryption, hashing, hash
-        sender_dict = json.loads(sender)
-        destination_dict = json.loads(destination)
-        message_dict = json.loads(message)
+        print("checking for messages...")
+        info_dict = json.loads(sender, destination, message) #decode out of json
+        print(info_dict)
         if destination == cherrypy.session['username']: # the message was meant for this user
             with sqlite3.connect(DB_STRING) as c:
                  c.execute("INSERT INTO msg(sender, msg, stamp) VALUES (?,?,?)",
@@ -136,6 +152,7 @@ class MainApp(object):
             print "Message received from " + sender
         else: # message was meant for somebody else
             print("Passing this message on: " + message)
+        threading.Timer(5, self.receiveMessage()).start()
 
     @cherrypy.expose # once frontend has been built, don't expose this. we don't want people calling this and posing as us
     def sendMessage(self, message, destination, stamp=int(time.time())):
@@ -219,8 +236,10 @@ if __name__ == '__main__':
                            })
     cherrypy.engine.subscribe('start', db_management.setup_users_database)
     cherrypy.engine.subscribe('start',db_management.setup_msg_table)
+    cherrypy.engine.subscribe('start',db_management.setup_total_users_table)
     cherrypy.engine.subscribe('stop', db_management.cleanup_users_database)
     cherrypy.engine.subscribe('stop', db_management.cleanup_msg_table)
+    cherrypy.engine.subscribe('stop', db_management.cleanup_total_users_table)
     cherrypy.tree.mount(MainApp(), '/', conf)
     cherrypy.engine.start()
     cherrypy.engine.block()

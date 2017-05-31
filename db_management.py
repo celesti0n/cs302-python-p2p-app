@@ -35,3 +35,16 @@ def cleanup_msg_table():
     """
     with sqlite3.connect(DB_STRING) as con:
         con.execute("DROP TABLE msg")
+
+def setup_total_users_table():
+    """
+    Create the total_users table in the database
+    """
+    with sqlite3.connect(DB_STRING) as con:
+        con.execute("CREATE TABLE total_users (user_id INTEGER PRIMARY KEY, username)")
+        # add public key argument to this later when required
+
+def cleanup_total_users_table():
+
+    with sqlite3.connect(DB_STRING) as con:
+        con.execute("DROP TABLE total_users")
