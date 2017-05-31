@@ -8,6 +8,7 @@ import sched
 import time
 import json
 import threading
+import socket
 
 import cherrypy
 from cherrypy.lib import auth_digest
@@ -17,7 +18,7 @@ import encrypt
 DB_STRING = "users.db"
 logged_on = 0  # 0 = never tried to log on, 1 = success, 2 = tried and failed
 
-listen_ip = '0.0.0.0' # 127.0.0.1 = localhost (loopback address), use 0.0.0.0 for local machine access
+listen_ip = socket.gethostbyname(socket.getfqdn()) # 127.0.0.1 = localhost (loopback address), use 0.0.0.0 for local machine access
 listen_port = 10002
 
 class MainApp(object):
@@ -48,7 +49,8 @@ class MainApp(object):
         return data
 
     @cherrypy.expose
-    def report(self, username, password, location=1, ip='202.36.244.14', port=listen_port):
+    def report(self, username, password, location=1, ip=listen_ip, port=listen_port):
+        print(ip)
         hashedPassword = encrypt.hash(password)  # call hash function for SHA256 encryption
         auth = self.authoriseUserLogin(username, hashedPassword, location, ip, port)
         error_code,error_message = auth.split(",")
@@ -56,7 +58,7 @@ class MainApp(object):
             global logged_on
             logged_on = 1
             cherrypy.session['username'] = username
-            cherrypy.session['password'] = hashedPassword  # is this safe?
+            cherrypy.session['password'] = hashedPassword
             cherrypy.session['location'] = location
             cherrypy.session['ip'] = ip
             cherrypy.session['port'] = port
@@ -124,24 +126,54 @@ class MainApp(object):
 
     @cherrypy.expose
     def receiveMessage(self, sender, destination, message, stamp=int(time.time())): # opt args: markdown, encoding, ecnryption, hashing, hash
-        # now = time.strftime("%d-%m-%Y %I:%M %p",time.localtime(float(time.mktime(time.localtime()))))
-        # threading.Timer(5.0, receiveMessage).start()
-        # input_dict = json.loads()
-        with sqlite3.connect(DB_STRING) as c:
-             c.execute("INSERT INTO msg(sender, msg, stamp) VALUES (?,?,?)",
-             [sender, message, stamp])
-        print "Message received from " + sender
+        sender_dict = json.loads(sender)
+        destination_dict = json.loads(destination)
+        message_dict = json.loads(message)
+        if destination == cherrypy.session['username']: # the message was meant for this user
+            with sqlite3.connect(DB_STRING) as c:
+                 c.execute("INSERT INTO msg(sender, msg, stamp) VALUES (?,?,?)",
+                 [sender, message, stamp])
+            print "Message received from " + sender
+        else: # message was meant for somebody else
+            print("Passing this message on: " + message)
+
+    @cherrypy.expose # once frontend has been built, don't expose this. we don't want people calling this and posing as us
+    def sendMessage(self, message, destination, stamp=int(time.time())):
+        # look up the 'destination' user in database and retrieve his corresponding ip address and port
+        c = sqlite3.connect(DB_STRING)
+        cur = c.cursor()
+        cur.execute("SELECT ip, port FROM user_string WHERE username=?",
+                    [destination])
+        conn_tuple = cur.fetchall()
+        conn_format = str(conn_tuple).replace("[(u","").replace("u","").replace(")]","").replace("'","")
+        ip, port = conn_format.split(', ') # use this in URL formatting
+
+        # message data must be encoded into JSON
+
+        postdata = self.jsonEncode(cherrypy.session['username'], message, destination, stamp)
+        print(postdata)
+        req = urllib2.Request("http://" + ip + ":" + port + "/receiveMessage",
+                             postdata, {'Content-Type': 'application/json'})
+        print(req)
+        response = urllib2.urlopen(req).read()
+        print(response.get_full_url())
+        if (response == '0'): # successful
+            print "Message sent to server."
+        raise cherrypy.HTTPRedirect("/home")
 
     @cherrypy.expose
-    def sendMessage(self, message, destination): # destination arg has port info as well
-        # posted data must be JSON format
-        postdata = jsonEncode(cherrypy.session['username'], message, destination)
-        dest = "http://" + destination + "/receiveMessage?"
-        fptr = urllib2.urlopen(dest, urllib.urlencode(postdata)).read()
-        print(fptr)
-        fptr.close()
-        print "Message sent to server."
-        raise cherrypy.HTTPRedirect("/")
+    def test(self, destination):
+        # look up the 'destination' user in database and retrieve his corresponding ip address and port
+        c = sqlite3.connect(DB_STRING)
+        cur = c.cursor()
+        cur.execute("SELECT ip, port FROM user_string WHERE username=?",
+                    [destination])
+        conn_tuple = cur.fetchall()
+        conn_format = str(conn_tuple).replace("[(u","").replace("u","").replace(")]","").replace("'","")
+        ip, port = conn_format.split(', ')
+        print(ip)
+        print(port)
+        return conn_format
 
     def authoriseUserLogin(self,username, password, location, ip, port):
         params = {'username':username, 'password':password, 'location':location, 'ip':ip, 'port':port}
@@ -158,8 +190,8 @@ class MainApp(object):
         # string = str(user_list).strip('[]').replace("(u'","").replace("',)","") #  remove extra formatting from being a tuple of tuples
         # return string
 
-    def jsonEncode(sender, message, destination):
-        output_dict = { "sender": sender, "message": message, "destination": destination}
+    def jsonEncode(self, sender, message, destination, stamp):
+        output_dict = { "sender": sender, "message": message, "destination": destination, "stamp": stamp}
         data = json.dumps(output_dict)
         return data
 
