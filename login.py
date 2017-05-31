@@ -4,7 +4,6 @@ import sqlite3
 import string
 import urllib
 import urllib2
-import hashlib
 import sched
 import time
 import json
@@ -13,11 +12,12 @@ import threading
 import cherrypy
 from cherrypy.lib import auth_digest
 import db_management
+import encrypt
 
 DB_STRING = "users.db"
 logged_on = 0  # 0 = never tried to log on, 1 = success, 2 = tried and failed
 
-listen_ip = "0.0.0.0" # 127.0.0.1 = localhost (loopback address), use 0.0.0.0 for local machine access
+listen_ip = '0.0.0.0' # 127.0.0.1 = localhost (loopback address), use 0.0.0.0 for local machine access
 listen_port = 10002
 
 class MainApp(object):
@@ -48,16 +48,8 @@ class MainApp(object):
         return data
 
     @cherrypy.expose
-    def register(self, username, password, work_id):
-        #in the future need to have length checks for params
-        with sqlite3.connect(DB_STRING) as c:
-            c.execute("INSERT INTO user_string(session_id, username, password, work_id) VALUES (?,?,?,?)",
-            [cherrypy.session.id, username, password, work_id])
-        return open('home.html').read().format(name=username,sid=cherrypy.session.id)
-
-    @cherrypy.expose
     def report(self, username, password, location=1, ip='202.36.244.14', port=listen_port):
-        hashedPassword = hash(password)  # call hash function for SHA256 encryption
+        hashedPassword = encrypt.hash(password)  # call hash function for SHA256 encryption
         auth = self.authoriseUserLogin(username, hashedPassword, location, ip, port)
         error_code,error_message = auth.split(",")
         if (error_code == '0'):  # successful login, populate session variables
@@ -126,7 +118,8 @@ class MainApp(object):
             return api_call
 
     @cherrypy.expose
-    def ping(): # for other people to check me out
+    def ping(self): # for other people to check me out, implement sender arg later
+        print("SOMEBODY PINGED YOU!")
         return '0'
 
     @cherrypy.expose
@@ -170,10 +163,7 @@ class MainApp(object):
         data = json.dumps(output_dict)
         return data
 
-# HASHING ALGORITHM - SHA256
-def hash(str):
-    hashed_str = hashlib.sha256(str + 'COMPSYS302-2017').hexdigest() #hexdigest returns hex in string form, use digest for byte form
-    return hashed_str
+
 
 conf = {
         '/': {
