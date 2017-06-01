@@ -1,0 +1,87 @@
+@import url(https://fonts.googleapis.com/css?family=Roboto:300);
+@import url(https://fonts.googleapis.com/css?family=Montserrat:300);
+@import url(https://fonts.googleapis.com/css?family=Raleway:200,300,600,600i);
+
+/* FORMATTING INDEX.HTML*/
+.login-page {
+  width: 450px;
+  padding: 8% 0 0;
+  margin: auto;
+}
+
+.form {
+  position: relative;
+  z-index: 1;
+  background: #ffffff;
+  max-width: 450px;
+  margin: 0 auto 100px;
+  padding: 45px;
+  text-align: center;
+  box-shadow: 0 0 20px 0 rgba(0, 0, 0, 0.2), 0 5px 5px 0 rgba(0, 0, 0, 0.24);
+}
+.form input {
+  outline: 0;
+  background: #f2f2f2; /* slightly grey fields */
+  width: 100%;
+  border: 0;
+  margin: 0 0 15px;
+  padding: 15px;
+  box-sizing: border-box;
+  font-size: 14px;
+}
+.form button {
+  outline: 0;
+  background: #e67e22; /*color of button*/
+  width: 100%;
+  border: 0;
+  padding: 15px;
+  color: #ffffff; /*color of text*/
+  font-size: 15px;
+  -webkit-transition: all 0.3 ease;
+  transition: all 0.3 ease;
+  cursor: pointer;
+}
+.form button:hover,.form button:active,.form button:focus {
+  background: #B25B2C;
+}
+
+body {
+  background: #3eb2ae;
+  font-family: "Raleway", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/*END OF INDEX.HTML*/
+
+/*HOME.HTML CSS FORMATTING*/
+
+/* Add a black background color to the top navigation */
+.topnav {
+    background-color: #334;
+    overflow: hidden;
+}
+
+/* Style the links inside the navigation bar */
+.topnav a {
+    float: left;
+    color: #f2f2f2;
+    text-align: center;
+    padding-top: 14px;
+    padding-bottom: 14px;
+    padding-left: 10px;
+    padding-right: 20px;
+    text-decoration: none;
+    font-size: 17px;
+}
+
+/* Change the color of links on hover */
+.topnav a:hover {
+    color: #e37222;
+}
+
+/* Add a color to the active/current link */
+.topnav a.active {
+    color: white;
+    font-weight: bold;
+}

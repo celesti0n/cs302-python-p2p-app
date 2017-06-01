@@ -2,28 +2,34 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>COMPSYS302 Project - Home</title>
-      <link rel="stylesheet" href="/css/style.css">
+  <title>fort - secure p2p network and chat</title>
+      <link rel="stylesheet" href="/static/css/style.css">
 </head>
 
 <body>
-  <div class="landing-page">
-    <h1>USER_NAME, thanks for logging in!</h1>
+    <div class="topnav">
+    <a href="#logo">LOGO_</a>
+    <a href="./home">fort secure network</a>
+    <a href="#news">messages</a>
+    <a href="#contact">view profiles</a>
+    <a href="#about">my fort</a>
+    <a href="#logoff">log off</a>
+    </div>
+    <h1><center>welcome, USER_NAME.</center></h1>
     <br>
-    <p>Your session id is: SESSION_ID</p>
     <form class="login-form" method = "get" action = "/listUsers/">
-      <p>USERS_ONLINE</p>
+    <center>USERS_ONLINE
       <br>LIST_OF_USERS<br><br>
 
       Here's some messages people are sending you:
-      <br><br>
+      <br>
       MESSAGE_LIST
-      <center><button type = "submit">View total users</button></center>
+      <br><hr>
+      <button type = "submit">View total users</button>
     </form>
     <br>
     <form class="log-off" method = "get" action = "/logoff/">
-      <center><button type = "submit">LOG OFF</button></center>
+      <button type = "submit">log off</button></center>
     </form>
-  </div>
 </body>
 </html>

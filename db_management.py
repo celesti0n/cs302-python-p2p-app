@@ -21,21 +21,6 @@ def cleanup_users_database():
     with sqlite3.connect(DB_STRING) as con:
         con.execute("DROP TABLE user_string")
 
-def setup_msg_table():
-    """
-    Create the msg table in the database, which stores messages sent to the user
-    """
-    with sqlite3.connect(DB_STRING) as con:
-        con.execute("CREATE TABLE msg (msg_id INTEGER PRIMARY KEY, sender, msg, stamp)")
-        # add public key argument to this later when required
-
-def cleanup_msg_table():
-    """
-    Destroy 'msg' table when server shuts down.
-    """
-    with sqlite3.connect(DB_STRING) as con:
-        con.execute("DROP TABLE msg")
-
 def setup_total_users_table():
     """
     Create the total_users table in the database
