@@ -17,7 +17,7 @@ import db_management
 import encrypt
 
 DB_STRING = "users.db"
-logged_on = 0  # 0 = never tried to log on, 1 = success, 2 = tried and failed
+logged_on = 0  # 0 = never tried to log on, 1 = success, 2 = tried and failed, 3 = success and logged out
 
 listen_ip = socket.gethostbyname(socket.getfqdn()) # 127.0.0.1 = localhost (loopback address), use 0.0.0.0 for local machine access
 listen_port = 10002
@@ -32,6 +32,8 @@ class MainApp(object):
         # need conditional to show error message if login failed
         if (logged_on == 2):  # 2 shows up if a failed login attempt has been made
             data = data.replace("LOGIN_STATUS", "An invalid username or password was entered. Please try again.")
+        elif (logged_on == 3):
+            data = data.replace("LOGIN_STATUS", "Logged out successfully. Thanks for using fort secure chat.")
         else:  # if no login attempt has been made or login successful, do not show prompt
             data = data.replace("LOGIN_STATUS", "")
         return data
@@ -96,7 +98,7 @@ class MainApp(object):
         if (error_code == '0'): # later add different logic if enc = 1
             for i in range(0, users_online):
                 data = api_format.split() # split each user into different list element
-                print(data)
+                # print(data)
                 try: # if user has only provided the required 5 params
                     username,location,ip,port,epoch_time = data[i].split(",",4)
                     with sqlite3.connect(DB_STRING) as c:
@@ -126,7 +128,9 @@ class MainApp(object):
         error_code = api_call[0]
         if (error_code == '0'):
             cherrypy.lib.sessions.expire()
-            return "Logged out successfully!"
+            global logged_on
+            logged_on = 3
+            raise cherrypy.HTTPRedirect('/')
         else:
             return api_call
 
