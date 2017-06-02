@@ -148,18 +148,22 @@ class MainApp(object):
         return '/ping /listAPI /receiveMessage [sender] [destination] [message] [stamp]'
 
     @cherrypy.expose
-    def receiveMessage(self, sender, destination, message, stamp=int(time.time())): # opt args: markdown, encoding, ecnryption, hashing, hash
+    @cherrypy.tools.json_in() # read documentation, all json input parameters stored in cherrypy.request.json
+    def receiveMessage(self): # opt args: markdown, encoding, ecnryption, hashing, hash
         # refactor this to take in a single argument which is of type JSON, use  @cherrypy.json_in() decorator
-        if destination ==  'mwon724': # the message was meant for this user
+        if cherrypy.request.json['destination'] ==  'mwon724': # the message was meant for this user
             with sqlite3.connect(DB_STRING) as c:
                  c.execute("INSERT INTO msg_received(sender, destination, msg, stamp) VALUES (?,?,?,?)",
-                 [sender, destination, message, stamp])
-            print "Message received from " + sender
+                 [cherrypy.request.json['sender'], cherrypy.request.json['destination'],
+                  cherrypy.request.json['message'], cherrypy.request.json['stamp']])
+            print "Message received from " + cherrypy.request.json['sender']
             return "Thanks for sending me a message!"
         else: # message was meant for somebody else
-            print("Passing this message on: " + message + ". It was meant for " + destination)
+            print("Passing this message on: " + cherrypy.request.json['message'] + ". It was meant for " + \
+            cherrypy.request.json['destination'])
 
     @cherrypy.expose # once frontend has been built, don't expose this. we don't want people calling this and posing as us
+
     def sendMessage(self, destination, message, stamp=int(time.time())):
         # look up the 'destination' user in database and retrieve his corresponding ip address and port
         c = sqlite3.connect(DB_STRING)
@@ -210,15 +214,15 @@ class MainApp(object):
         units = ''
         if timeSince < 60:
             units = ' second(s) ago'
-        elif timeSince >= 60 or timeSince < 3600:
+        elif timeSince >= 60 and timeSince < 3600:
+            timeSince = int(timeSince / 60)
+            units = ' minute(s) ago'
+        elif timeSince >= 3600 and timeSince < 86400:
             timeSince = int(timeSince / 3600)
             units = ' hour(s) ago'
-        elif timeSince >= 3600 or timeSince < 86400:
+        elif timeSince >= 86400 and timeSince < 604800:
             timeSince = int(timeSince / 86400)
             units = ' day(s) ago'
-        elif timeSince >= 8400 or timeSince < 604800:
-            timeSince = int(timeSince / 604800)
-            units = ' week(s) ago'
         else:
             return "A very long time ago"
 
