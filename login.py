@@ -10,6 +10,9 @@ import json
 import threading
 import socket
 import sys
+import datetime
+from json import load
+from urllib2 import urlopen
 
 import cherrypy
 from cherrypy.lib import auth_digest
@@ -19,7 +22,7 @@ import encrypt
 DB_STRING = "users.db"
 logged_on = 0  # 0 = never tried to log on, 1 = success, 2 = tried and failed, 3 = success and logged out
 
-listen_ip = socket.gethostbyname(socket.getfqdn()) # 127.0.0.1 = localhost (loopback address), use 0.0.0.0 for local machine access
+listen_ip = '192.168.20.2' # socket.gethostbyname(socket.getfqdn())
 listen_port = 10002
 
 class MainApp(object):
@@ -50,8 +53,8 @@ class MainApp(object):
         return data
 
     @cherrypy.expose
-    def report(self, username, password, location=1, ip=listen_ip, port=listen_port):
-        print(ip)
+    def report(self, username, password, location='2', ip='180.148.96.53', port=listen_port): # change ip = back to listen_ip
+        # print(ip)
         hashedPassword = encrypt.hash(password)  # call hash function for SHA256 encryption
         auth = self.authoriseUserLogin(username, hashedPassword, location, ip, port)
         error_code,error_message = auth.split(",")
@@ -67,6 +70,7 @@ class MainApp(object):
             cherrypy.session['json'] = 0
             raise cherrypy.HTTPRedirect('/home')
         else:
+            print("ERROR: " + error_code)
             global logged_on
             logged_on = 2
             raise cherrypy.HTTPRedirect('/')  # set flag to change /index function
@@ -145,51 +149,37 @@ class MainApp(object):
 
     @cherrypy.expose
     def receiveMessage(self, sender, destination, message, stamp=int(time.time())): # opt args: markdown, encoding, ecnryption, hashing, hash
-        info_dict = json.loads(sender, destination, message) #decode out of json
-        print(info_dict)
-        if destination == cherrypy.session['username']: # the message was meant for this user
+        # refactor this to take in a single argument which is of type JSON, use  @cherrypy.json_in() decorator
+        if destination ==  'mwon724': # the message was meant for this user
             with sqlite3.connect(DB_STRING) as c:
-                 c.execute("INSERT INTO msg_received(sender, msg, stamp) VALUES (?,?,?)",
-                 [sender, message, stamp])
+                 c.execute("INSERT INTO msg_received(sender, destination, msg, stamp) VALUES (?,?,?,?)",
+                 [sender, destination, message, stamp])
             print "Message received from " + sender
+            return "Thanks for sending me a message!"
         else: # message was meant for somebody else
-            print("Passing this message on: " + message)
-        threading.Timer(5, self.receiveMessage()).start()
+            print("Passing this message on: " + message + ". It was meant for " + destination)
 
     @cherrypy.expose # once frontend has been built, don't expose this. we don't want people calling this and posing as us
-    def sendMessage(self, message, destination, stamp=int(time.time())):
+    def sendMessage(self, destination, message, stamp=int(time.time())):
         # look up the 'destination' user in database and retrieve his corresponding ip address and port
         c = sqlite3.connect(DB_STRING)
         cur = c.cursor()
         cur.execute("SELECT ip, port FROM user_string WHERE username=?",
                     [destination])
-        conn_tuple = cur.fetchall()
-        conn_format = str(conn_tuple).replace("[(u","").replace("u","").replace(")]","").replace("'","")
-        ip, port = conn_format.split(', ') # use this in URL formatting
-
+        values_tuple = cur.fetchall()
+        ip = values_tuple[0][0]
+        port = values_tuple[0][1]
         # message data must be encoded into JSON
-
         postdata = self.jsonEncode(cherrypy.session['username'], message, destination, stamp)
         req = urllib2.Request("http://" + ip + ":" + port + "/receiveMessage",
                              postdata, {'Content-Type': 'application/json'})
         response = urllib2.urlopen(req).read()
-        if (response == '0'): # successful
-            print "Message sent to server."
-        raise cherrypy.HTTPRedirect("/home")
-
-    @cherrypy.expose
-    def test(self, destination):
-        # look up the 'destination' user in database and retrieve his corresponding ip address and port
-        c = sqlite3.connect(DB_STRING)
-        cur = c.cursor()
-        cur.execute("SELECT ip, port FROM user_string WHERE username=?",
-                    [destination])
-        conn_tuple = cur.fetchall()
-        conn_format = str(conn_tuple).replace("[(u","").replace("u","").replace(")]","").replace("'","")
-        ip, port = conn_format.split(', ')
-        print(ip)
-        print(port)
-        return conn_format
+        if (response.find('0') != -1): # successful
+            print "Message sent to client: " + destination
+            with sqlite3.connect(DB_STRING) as c:
+                 c.execute("INSERT INTO msg_sent(sender, destination, msg, stamp) VALUES (?,?,?,?)",
+                 [cherrypy.session['username'], destination, message, stamp])
+            raise cherrypy.HTTPRedirect("/home")
 
     def authoriseUserLogin(self,username, password, location, ip, port):
         params = {'username':username, 'password':password, 'location':location, 'ip':ip, 'port':port}
@@ -201,13 +191,38 @@ class MainApp(object):
         cur = c.cursor()
         cur.execute("SELECT sender, msg, stamp FROM msg_received")
         msg_list = cur.fetchall()
-        print(msg_list)
-        return str(msg_list)
+        messages = ''
+        for i in range(0, len(msg_list)):
+            messages += '<b>' + str(msg_list[i][0]) + '</b>' + " at " + str(self.epochFormat(msg_list[i][2])) + \
+            " (" + str(self.timeSinceMessage(msg_list[i][2])) + ")" + " messaged you: " + str(msg_list[i][1]) + "<br />"
+        return messages
 
     def jsonEncode(self, sender, message, destination, stamp):
         output_dict = { "sender": sender, "message": message, "destination": destination, "stamp": stamp}
         data = json.dumps(output_dict)
         return data
+
+    def epochFormat(self, timeStamp):
+        return datetime.datetime.fromtimestamp(timeStamp).strftime('%Y-%m-%d %H:%M:%S')
+
+    def timeSinceMessage(self, timeStamp):
+        timeSince = time.time() - timeStamp
+        units = ''
+        if timeSince < 60:
+            units = ' second(s) ago'
+        elif timeSince >= 60 or timeSince < 3600:
+            timeSince = int(timeSince / 3600)
+            units = ' hour(s) ago'
+        elif timeSince >= 3600 or timeSince < 86400:
+            timeSince = int(timeSince / 86400)
+            units = ' day(s) ago'
+        elif timeSince >= 8400 or timeSince < 604800:
+            timeSince = int(timeSince / 604800)
+            units = ' week(s) ago'
+        else:
+            return "A very long time ago"
+
+        return str(timeSince) + units
 
 
 
@@ -239,13 +254,3 @@ if __name__ == '__main__':
     cherrypy.tree.mount(MainApp(), '/', conf)
     cherrypy.engine.start()
     cherrypy.engine.block()
-    # this shit probably doesn't work
-    # def reportUpdate(s):
-    #     while (logged_on == 1): # call report once a minute with session credentials
-    #         report(cherrypy.session['username'], cherrypy.session['password'],
-    #         cherrypy.session['location'],cherrypy.session['ip'],cherrypy.session['port'])
-    #         print("reported.")
-    #         s.enter(1, 1, reportUpdate, ())
-    #
-    # s.enter(1, 1, reportUpdate, ())
-    # s.run()
