@@ -11,6 +11,8 @@ import threading
 import socket
 import sys
 import datetime
+import atexit
+
 from json import load
 from urllib2 import urlopen
 
@@ -74,6 +76,10 @@ class MainApp(object):
             logged_on = 1
             cherrypy.session['username'] = username
             cherrypy.session['password'] = hashedPassword
+            # also store username and password in user_credentials table; forceful logoff (on application exit/crash) uses this
+            with sqlite3.connect(DB_STRING) as c:
+                 c.execute("INSERT INTO user_credentials(username, password) VALUES (?,?)",
+                 [username, hashedPassword])
             cherrypy.session['location'] = location
             cherrypy.session['ip'] = ip
             cherrypy.session['port'] = port
@@ -152,6 +158,18 @@ class MainApp(object):
             raise cherrypy.HTTPRedirect('/')
         else:
             return api_call
+
+    def logoffForced(self):
+        c = sqlite3.connect(DB_STRING)
+        cur = c.cursor()
+        cur.execute("SELECT username, password FROM user_credentials")
+        credentials = cur.fetchall()
+        for i in range(0, len(credentials)):
+            params = {'username': credentials[0][0], 'password': credentials[0][1]}
+            full_url = 'http://cs302.pythonanywhere.com/logoff?' + urllib.urlencode(params)
+            api_call = urllib2.urlopen(full_url).read()
+            if api_call.find('0') != -1:  # successful
+                return
 
     @cherrypy.expose
     def ping(self): # for other people to check me out, implement sender arg later
@@ -357,15 +375,18 @@ conf = {
     }
 
 if __name__ == '__main__':
-    cherrypy.config.update({'server.socket_host': listen_ip,
-                            'server.socket_port': listen_port,
-                            'tools.staticdir.debug': True,
-                            'engine.autoreload.on': True,
-                            'tools.gzip.on' : True,
-                            'tools.gzip.mime_types' : ['text/*'],
-                           })
-    cherrypy.engine.subscribe('start', db_management.setup_users_database)
-    cherrypy.engine.subscribe('stop', db_management.cleanup_users_database)
-    cherrypy.tree.mount(MainApp(), '/', conf)
-    cherrypy.engine.start()
-    cherrypy.engine.block()
+    try:
+        cherrypy.config.update({'server.socket_host': listen_ip,
+                                'server.socket_port': listen_port,
+                                'tools.staticdir.debug': True,
+                                'engine.autoreload.on': True,
+                                'tools.gzip.on' : True,
+                                'tools.gzip.mime_types' : ['text/*'],
+                               })
+        cherrypy.engine.subscribe('start', db_management.setup_users_database)
+        cherrypy.engine.subscribe('stop', db_management.cleanup_users_database)
+        cherrypy.tree.mount(MainApp(), '/', conf)
+        cherrypy.engine.start()
+        cherrypy.engine.block()
+    finally: # on application exit
+        MainApp().logoffForced()

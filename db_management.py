@@ -16,7 +16,6 @@ def setup_users_database():
 def cleanup_users_database():
     """
     Destroy 'user_string' table when server shuts down.
-    Maybe take this out later.
     """
     with sqlite3.connect(DB_STRING) as con:
         con.execute("DROP TABLE user_string")
