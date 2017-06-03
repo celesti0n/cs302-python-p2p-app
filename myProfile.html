@@ -13,11 +13,23 @@
   <a href="#profiles">view profiles</a>
   <a href="/logoff/">log off</a></ul>
   </div>
-    <h1><center>USER_NAME's profile</center></h1>
-    <br>
+    <h1><center>USER_NAME's profile</center></h1><br>
+  <center>PROFILE_DETAILS
+    <hr>
+    <b>edit your profile</b><br />
+    <div class="form">
+    <form class="login-form" method = "post" action = "/updateProfile/">
+      <input type="text" placeholder="full name" name = "fullname"/>
+      <input type="text" placeholder="position" name = "position"/>
+      <input type="text" placeholder="description" name = "description"/>
+      <input type="text" placeholder="location" name = "location"/>
+      <input type="text" placeholder="picture" name = "picture"/>
+    <button type = "submit">update</button>
+    </form>
+  </div>
       <form class="login-form" method = "get" action = "/listUsers/">
       <button type = "submit">view total users</button>
-      </form>
+    </form></center>
     <br>
 </body>
 </html>

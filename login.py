@@ -59,6 +59,7 @@ class MainApp(object):
         data = f.read()
         f.close()
         data = data.replace("USER_NAME", cherrypy.session['username'])
+        data = data.replace("PROFILE_DETAILS", self.displayProfile())
         return data
 
 
@@ -86,17 +87,20 @@ class MainApp(object):
             raise cherrypy.HTTPRedirect('/')  # set flag to change /index function
 
     @cherrypy.expose
-    def listUsers(self):
+    def listAllUsers(self):
+        with sqlite3.connect(DB_STRING) as c:
+             c.execute("DELETE FROM total_users") # in order to avoid dupes in table
         url = 'http://cs302.pythonanywhere.com/listUsers'
         api_call = urllib2.urlopen(url).read()
         total_users_list = api_call.split(",")
         total_users = len(total_users_list)
-        print total_users_list
+        total_users_string = "There are " + str(total_users) + " current users. " + "<br />"
         for i in range(0, total_users):
             with sqlite3.connect(DB_STRING) as c:
                  c.execute("INSERT INTO total_users(username) VALUES (?)",
                  [total_users_list[i]])
-        return "There are " + str(total_users) + " current users. \n" + str(total_users_list)
+            total_users_string += str(total_users_list[i]) + "<br />"
+        return total_users_string
 
     @cherrypy.expose
     def getList(self):
@@ -112,7 +116,6 @@ class MainApp(object):
         if (error_code == '0'): # later add different logic if enc = 1
             for i in range(0, users_online):
                 data = api_format.split() # split each user into different list element
-                # print(data)
                 try: # if user has only provided the required 5 params
                     username,location,ip,port,epoch_time = data[i].split(",",4)
                     with sqlite3.connect(DB_STRING) as c:
@@ -157,7 +160,7 @@ class MainApp(object):
 
     @cherrypy.expose
     def listAPI(self):
-        return '/ping /listAPI /receiveMessage [sender] [destination] [message] [stamp]'
+        return '/ping /listAPI /receiveMessage [sender] [destination] [message] [stamp] /getProfile [profile_username]'
 
     @cherrypy.expose
     @cherrypy.tools.json_in() # read documentation, all json input parameters stored in cherrypy.request.json
@@ -174,8 +177,7 @@ class MainApp(object):
             print("Passing this message on: " + cherrypy.request.json['message'] + ". It was meant for " + \
             cherrypy.request.json['destination'])
 
-    @cherrypy.expose # once frontend has been built, don't expose this. we don't want people calling this and posing as us
-
+    @cherrypy.expose
     def sendMessage(self, destination, message, stamp=time.time()):
         # look up the 'destination' user in database and retrieve his corresponding ip address and port
         c = sqlite3.connect(DB_STRING)
@@ -186,7 +188,7 @@ class MainApp(object):
         ip = values_tuple[0][0]
         port = values_tuple[0][1]
         # message data must be encoded into JSON
-        postdata = self.jsonEncode(cherrypy.session['username'], message, destination, stamp)
+        postdata = self.jsonEncodeMessage(cherrypy.session['username'], message, destination, stamp)
         req = urllib2.Request("http://" + ip + ":" + port + "/receiveMessage",
                              postdata, {'Content-Type': 'application/json'})
         response = urllib2.urlopen(req).read()
@@ -196,6 +198,79 @@ class MainApp(object):
                  c.execute("INSERT INTO msg_sent(sender, destination, msg, stamp) VALUES (?,?,?,?)",
                  [cherrypy.session['username'], destination, message, stamp])
             raise cherrypy.HTTPRedirect("/home")
+
+    @cherrypy.expose
+    def getProfile(self, profile_username): # this function is called by OTHER people to grab my data. use displayProfile to see my own, grabProfile to get others
+        if profile_username == "mwon724":
+            c = sqlite3.connect(DB_STRING)
+            cur = c.cursor()
+            cur.execute("SELECT fullname, position, description, location, picture FROM profiles WHERE profile_username=?",
+                        [profile_username])
+            profile_info = cur.fetchall()
+            postdata = self.jsonEncodeProfile(profile_info[0][0], profile_info[0][1], profile_info[0][2],
+                       profile_info[0][3], profile_info[0][4])
+            print("Somebody grabbed your profile details!")
+            return postdata
+
+
+    @cherrypy.expose
+    def grabProfile(self, profile_username): #this function is called by me to grab other people's JSON encoded data and decode it to string.
+        c = sqlite3.connect(DB_STRING)
+        cur = c.cursor()
+        cur.execute("SELECT ip, port FROM user_string WHERE username=?",
+                    [profile_username])
+        values_tuple = cur.fetchall()
+        ip = values_tuple[0][0]
+        port = values_tuple[0][1]
+        params = self.jsonEncodeUsername(profile_username)
+        req = urllib2.Request("http://" + ip + ":" + port + "/getProfile",
+                             params, {'Content-Type': 'application/json'})
+        response = urllib2.urlopen(req).read()
+        try: # if response is not valid JSON, json.loads should throw a ValueError
+            print "Profile details grabbed: " + profile_username
+            with sqlite3.connect(DB_STRING) as c:
+                 # decode response
+                 response_str = json.loads(response)
+                 c.execute("INSERT INTO profiles(profile_username, fullname, position, description, location, picture) VALUES (?,?,?,?,?,?)",
+                 (profile_username, response_str["fullname"], response_str["position"], response_str["description"],
+                 response_str["location"], response_str["picture"]))
+            raise cherrypy.HTTPRedirect("/home")
+        except ValueError:
+            print "An error occurred. The target user is not returning a JSON encoding their profile info."
+            return response
+
+    @cherrypy.expose
+    def displayProfile(self):
+        try: # assume the values we want already exist, and grab those
+            c = sqlite3.connect(DB_STRING)
+            cur = c.cursor()
+            cur.execute("SELECT fullname, position, description, location, picture FROM profiles WHERE profile_username=?",
+                        [cherrypy.session['username']])
+            profile_info = cur.fetchall()
+            fullname = profile_info[0][0]
+            position = profile_info[0][1]
+            description = profile_info[0][2]
+            location = profile_info[0][3]
+            picture = profile_info[0][4]
+            return "Profile Picture: " + str(picture) + '<br />' + "Full Name: " + str(fullname) + '<br />' + \
+            "Position: " + str(position) + '<br />' + "Description: " + str(description) + '<br />' + "Location: " + str(location)
+        except: # if currently logged on user has never used this client, insert placeholders into the db and call function again
+            with sqlite3.connect(DB_STRING) as c:
+                 c.execute("INSERT INTO profiles(profile_username, fullname, position, description, location, picture) VALUES (?,?,?,?,?,?)",
+                 [cherrypy.session['username'], "Welcome, new user. Edit these fields!", "None", "None", "None", "No picture supplied"])
+            self.displayProfile()
+
+    @cherrypy.expose
+    def updateProfile(self, fullname, position, description, location, picture):
+        c = sqlite3.connect(DB_STRING)
+        cur = c.cursor()
+        cur.execute ("""
+        UPDATE profiles SET fullname=?,position=?,description=?,location=?,picture=? WHERE profile_username=?""",
+        (fullname, position, description, location, picture, cherrypy.session['username']))
+        c.commit() # thank you stack overflow
+        print(cherrypy.session['username'])
+        raise cherrypy.HTTPRedirect("/myProfile")
+
 
     def authoriseUserLogin(self,username, password, location, ip, port):
         params = {'username':username, 'password':password, 'location':location, 'ip':ip, 'port':port}
@@ -228,8 +303,18 @@ class MainApp(object):
             " (" + str(self.timeSinceMessage(msg_list[i][2])) + ")" + " this: " + str(msg_list[i][1]) + "<br />"
         return messages
 
-    def jsonEncode(self, sender, message, destination, stamp):
+    def jsonEncodeMessage(self, sender, message, destination, stamp):
         output_dict = { "sender": sender, "message": message, "destination": destination, "stamp": stamp}
+        data = json.dumps(output_dict)
+        return data
+
+    def jsonEncodeProfile(self, fullname, position, description, location, picture):
+        output_dict = { "fullname": fullname, "position": position, "description": description, "location": location, "picture": picture}
+        data = json.dumps(output_dict)
+        return data
+
+    def jsonEncodeUsername(self, profile_username):
+        output_dict = {"profile_username": profile_username}
         data = json.dumps(output_dict)
         return data
 
@@ -279,9 +364,7 @@ if __name__ == '__main__':
                             'tools.gzip.mime_types' : ['text/*'],
                            })
     cherrypy.engine.subscribe('start', db_management.setup_users_database)
-    cherrypy.engine.subscribe('start',db_management.setup_total_users_table)
     cherrypy.engine.subscribe('stop', db_management.cleanup_users_database)
-    cherrypy.engine.subscribe('stop', db_management.cleanup_total_users_table)
     cherrypy.tree.mount(MainApp(), '/', conf)
     cherrypy.engine.start()
     cherrypy.engine.block()

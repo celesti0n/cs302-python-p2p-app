@@ -84,3 +84,13 @@ body {
     color: white;
     font-weight: bold;
 }
+
+.received-message-list {
+  text-align: justify;
+  text-justify: inter-word;
+}
+
+.sent-message-list {
+  text-align: justify;
+  text-justify: inter-word;  
+}
