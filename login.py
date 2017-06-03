@@ -200,12 +200,13 @@ class MainApp(object):
             raise cherrypy.HTTPRedirect("/home")
 
     @cherrypy.expose
-    def getProfile(self, profile_username): # this function is called by OTHER people to grab my data. use displayProfile to see my own, grabProfile to get others
-        if profile_username == "mwon724":
+    @cherrypy.tools.json_in() # profile_username input is stored in cherrypy.request.json['profile_username']
+    @cherrypy.tools.json_out() # allows the output to be of type application/json instead of text/html
+    def getProfile(self): # this function is called by OTHER people to grab my data. use displayProfile to see my own, grabProfile to get others
             c = sqlite3.connect(DB_STRING)
             cur = c.cursor()
             cur.execute("SELECT fullname, position, description, location, picture FROM profiles WHERE profile_username=?",
-                        [profile_username])
+                        [cherrypy.request.json['profile_username']])
             profile_info = cur.fetchall()
             postdata = self.jsonEncodeProfile(profile_info[0][0], profile_info[0][1], profile_info[0][2],
                        profile_info[0][3], profile_info[0][4])
@@ -309,7 +310,7 @@ class MainApp(object):
         return data
 
     def jsonEncodeProfile(self, fullname, position, description, location, picture):
-        output_dict = { "fullname": fullname, "position": position, "description": description, "location": location, "picture": picture}
+        output_dict = { 'fullname': fullname, 'position': position, 'description': description, 'location': location, 'picture': picture}
         data = json.dumps(output_dict)
         return data
 
