@@ -54,6 +54,15 @@ class MainApp(object):
         return data
 
     @cherrypy.expose
+    def myProfile(self):
+        f = open("myProfile.html", "r")
+        data = f.read()
+        f.close()
+        data = data.replace("USER_NAME", cherrypy.session['username'])
+        return data
+
+
+    @cherrypy.expose
     def report(self, username, password, location='2', ip='180.148.96.53', port=listen_port): # change ip = back to listen_ip
         # print(ip)
         hashedPassword = encrypt.hash(password)  # call hash function for SHA256 encryption
