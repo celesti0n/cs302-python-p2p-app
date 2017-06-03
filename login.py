@@ -78,6 +78,7 @@ class MainApp(object):
             cherrypy.session['password'] = hashedPassword
             # also store username and password in user_credentials table; forceful logoff (on application exit/crash) uses this
             with sqlite3.connect(DB_STRING) as c:
+                 c.execute("DELETE FROM user_credentials") # clear out db first - this WILL break things if you want multi-user support (A grade)
                  c.execute("INSERT INTO user_credentials(username, password) VALUES (?,?)",
                  [username, hashedPassword])
             cherrypy.session['location'] = location
