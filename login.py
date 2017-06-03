@@ -34,7 +34,7 @@ class MainApp(object):
         f.close()
         # need conditional to show error message if login failed
         if (logged_on == 2):  # 2 shows up if a failed login attempt has been made
-            data = data.replace("LOGIN_STATUS", "An invalid username or password was entered. Please try again.")
+            data = data.replace("LOGIN_STATUS", "Sorry, something went wrong. Please try again.")
         elif (logged_on == 3):
             data = data.replace("LOGIN_STATUS", "Logged out successfully. Thanks for using fort secure chat.")
         else:  # if no login attempt has been made or login successful, do not show prompt
