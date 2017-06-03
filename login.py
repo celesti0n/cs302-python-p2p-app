@@ -49,7 +49,8 @@ class MainApp(object):
         data = data.replace("USER_NAME", cherrypy.session['username'])
         data = data.replace("USERS_ONLINE", self.getList())
         data = data.replace("LIST_OF_USERS", self.showList())
-        data = data.replace("MESSAGE_LIST", self.displayMessage())
+        data = data.replace("RECEIVED_MESSAGE_LIST", self.displayReceivedMessage())
+        data = data.replace("SENT_MESSAGE_LIST", self.displaySentMessage())
         return data
 
     @cherrypy.expose
@@ -120,7 +121,9 @@ class MainApp(object):
         cur = c.cursor()
         cur.execute("SELECT username FROM user_string")
         user_list = cur.fetchall()
-        string = str(user_list).strip('[]').replace("(u'","").replace("',)","") #  remove extra formatting from being a tuple of tuples
+        string = ''
+        for i in range(0, len(user_list)):
+            string += str(user_list[i][0]) + '<br />'
         return string
 
 
@@ -190,15 +193,28 @@ class MainApp(object):
         full_url = 'http://cs302.pythonanywhere.com/report?' + urllib.urlencode(params)  #  converts to format &a=b&c=d...
         return urllib2.urlopen(full_url).read()
 
-    def displayMessage(self):
+    def displayReceivedMessage(self):
         c = sqlite3.connect(DB_STRING)
         cur = c.cursor()
-        cur.execute("SELECT sender, msg, stamp FROM msg_received")
+        cur.execute("SELECT sender, msg, stamp FROM msg_received WHERE destination=?",
+        [cherrypy.session['username']])
         msg_list = cur.fetchall()
         messages = ''
         for i in range(0, len(msg_list)):
             messages += '<b>' + str(msg_list[i][0]) + '</b>' + " at " + str(self.epochFormat(msg_list[i][2])) + \
             " (" + str(self.timeSinceMessage(msg_list[i][2])) + ")" + " messaged you: " + str(msg_list[i][1]) + "<br />"
+        return messages
+
+    def displaySentMessage(self):
+        c = sqlite3.connect(DB_STRING)
+        cur = c.cursor()
+        cur.execute("SELECT destination, msg, stamp FROM msg_sent WHERE sender=?",
+        [cherrypy.session['username']])
+        msg_list = cur.fetchall()
+        messages = ''
+        for i in range(0, len(msg_list)):
+            messages += 'You sent ' + '<b>' + str(msg_list[i][0]) + '</b>' + " at " + str(self.epochFormat(msg_list[i][2])) + \
+            " (" + str(self.timeSinceMessage(msg_list[i][2])) + ")" + " this: " + str(msg_list[i][1]) + "<br />"
         return messages
 
     def jsonEncode(self, sender, message, destination, stamp):
