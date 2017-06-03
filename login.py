@@ -176,7 +176,7 @@ class MainApp(object):
 
     @cherrypy.expose # once frontend has been built, don't expose this. we don't want people calling this and posing as us
 
-    def sendMessage(self, destination, message, stamp=int(time.time())):
+    def sendMessage(self, destination, message, stamp=time.time()):
         # look up the 'destination' user in database and retrieve his corresponding ip address and port
         c = sqlite3.connect(DB_STRING)
         cur = c.cursor()
@@ -202,6 +202,7 @@ class MainApp(object):
         full_url = 'http://cs302.pythonanywhere.com/report?' + urllib.urlencode(params)  #  converts to format &a=b&c=d...
         return urllib2.urlopen(full_url).read()
 
+    @cherrypy.expose
     def displayReceivedMessage(self):
         c = sqlite3.connect(DB_STRING)
         cur = c.cursor()
@@ -214,6 +215,7 @@ class MainApp(object):
             " (" + str(self.timeSinceMessage(msg_list[i][2])) + ")" + " messaged you: " + str(msg_list[i][1]) + "<br />"
         return messages
 
+    @cherrypy.expose
     def displaySentMessage(self):
         c = sqlite3.connect(DB_STRING)
         cur = c.cursor()

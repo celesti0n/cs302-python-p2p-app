@@ -15,16 +15,17 @@
     </div>
     <h1><center>welcome, USER_NAME.</center></h1>
     <br>
-    <center>USERS_ONLINE
-      <br>LIST_OF_USERS<br><br>
+    <center><div id ="users-online">USERS_ONLINE</div>
+      <br><div id = "list-of-users">LIST_OF_USERS</div><br><br>
 
       <i>Here's the messages you have received:</i>
       <br>
-      RECEIVED_MESSAGE_LIST
+      <div id = "received-message-list">RECEIVED_MESSAGE_LIST</div>
       <br><hr>
       <i>Here's the messages you have sent:</i>
       <br>
-      SENT_MESSAGE_LIST
+      <div id = "sent-message-list">SENT_MESSAGE_LIST</div>
+    </div>
       <div class="form">
         <form class="login-form" method = "post" action = "/sendMessage/">
           <input type="text" placeholder="who do you want to send to?" name = "destination"/>

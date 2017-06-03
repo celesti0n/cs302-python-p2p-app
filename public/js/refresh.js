@@ -1,10 +1,8 @@
-$(function() {
-    startRefresh();
+$(document).ready(function () {
+    setInterval(function() {
+        $("#users-online").load("./getList");
+        $("#list-of-users").load("./showList");
+        $("#received-message-list").load("./displayReceivedMessage");
+        $("#sent-message-list").load("./displaySentMessage")
+    }, 8000);
 });
-
-function startRefresh() {
-    setTimeout(startRefresh,4000);
-    $.get('./home', function(data) {
-        $('#content_div_id').html(data);
-    });
-}
