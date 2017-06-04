@@ -23,12 +23,12 @@ import encrypt
 
 DB_STRING = "users.db"
 logged_on = 0  # 0 = never tried to log on, 1 = success, 2 = tried and failed, 3 = success and logged out
-
+reload(sys)
+sys.setdefaultencoding('utf8')
 listen_ip = '192.168.20.2' # socket.gethostbyname(socket.getfqdn())
 listen_port = 10002
 
 class MainApp(object):
-
     @cherrypy.expose
     def index(self):
         f = open("index.html", "r")
@@ -50,9 +50,11 @@ class MainApp(object):
         f.close()
         data = data.replace("USER_NAME", cherrypy.session['username'])
         data = data.replace("USERS_ONLINE", self.getList())
-        data = data.replace("LIST_OF_USERS", self.showList())
+        data = data.replace("LIST_OF_ONLINE_USERS", self.showList())
+        data = data.replace("LIST_OF_TOTAL_USERS", self.listAllUsers())
         data = data.replace("RECEIVED_MESSAGE_LIST", self.displayReceivedMessage())
         data = data.replace("SENT_MESSAGE_LIST", self.displaySentMessage())
+        data = data.replace("PLACEHOLDER", self.getChatConvo())
         return data
 
     @cherrypy.expose
@@ -101,13 +103,33 @@ class MainApp(object):
         api_call = urllib2.urlopen(url).read()
         total_users_list = api_call.split(",")
         total_users = len(total_users_list)
-        total_users_string = "There are " + str(total_users) + " current users. " + "<br />"
+        total_users_string = ''
         for i in range(0, total_users):
             with sqlite3.connect(DB_STRING) as c:
                  c.execute("INSERT INTO total_users(username) VALUES (?)",
                  [total_users_list[i]])
-            total_users_string += str(total_users_list[i]) + "<br />"
+            total_users_string += '<li class="person"' + str(i+1) + '">' + \
+            '<img src="http://imgur.com/oymng0G.jpg" alt="" />' + '<span class="name">' + \
+            str(total_users_list[i]) + '</span>' + \
+            '<span class="preview">' + "LAST_ONLINE_TIMESTAMP" + '</span></li>'
         return total_users_string
+
+    @cherrypy.expose
+    def getChatConvo(self, username='hone075'):
+        # get conversation between somebody and the logged in user.
+        c = sqlite3.connect(DB_STRING)
+        cur = c.cursor()
+        cur.execute("SELECT sender, destination, msg FROM msg ORDER BY stamp ASC")
+        conversation = ''
+        for row in cur:
+            if (username == row[0]): # if the message belongs to the sender, call the div that styles left bubble
+                conversation += '<div class="bubble you">'
+                conversation += row[2] + '</div>'
+            elif (username == row[1]): # if the message belongs to me, call right bubble
+                conversation += '<div class="bubble me">'
+                conversation += row[2] + '</div>'
+        print(str(conversation))
+        return str(conversation)
 
     @cherrypy.expose
     def getList(self):
@@ -185,16 +207,16 @@ class MainApp(object):
     @cherrypy.tools.json_in() # read documentation, all json input parameters stored in cherrypy.request.json
     def receiveMessage(self): # opt args: markdown, encoding, ecnryption, hashing, hash
         # refactor this to take in a single argument which is of type JSON, use  @cherrypy.json_in() decorator
-        if cherrypy.request.json['destination'] ==  'mwon724': # the message was meant for this user
-            with sqlite3.connect(DB_STRING) as c:
-                 c.execute("INSERT INTO msg_received(sender, destination, msg, stamp) VALUES (?,?,?,?)",
-                 [cherrypy.request.json['sender'], cherrypy.request.json['destination'],
-                  cherrypy.request.json['message'], cherrypy.request.json['stamp']])
-            print "Message received from " + cherrypy.request.json['sender']
-            return "Thanks for sending me a message! The message is: " + cherrypy.request.json['message']
-        else: # message was meant for somebody else
-            print("Passing this message on: " + cherrypy.request.json['message'] + ". It was meant for " + \
-            cherrypy.request.json['destination'])
+        # if cherrypy.request.json['destination'] ==  'mwon724': # the message was meant for this user
+        with sqlite3.connect(DB_STRING) as c:
+             c.execute("INSERT INTO msg(sender, destination, msg, stamp) VALUES (?,?,?,?)",
+             [cherrypy.request.json['sender'], cherrypy.request.json['destination'],
+              cherrypy.request.json['message'], cherrypy.request.json['stamp']])
+        print "Message received from " + cherrypy.request.json['sender']
+        return '0'
+        # else: # message was meant for somebody else
+        #     print("Passing this message on: " + cherrypy.request.json['message'] + ". It was meant for " + \
+        #     cherrypy.request.json['destination'])
 
     @cherrypy.expose
     def sendMessage(self, destination, message, stamp=time.time()):
@@ -211,10 +233,11 @@ class MainApp(object):
         req = urllib2.Request("http://" + ip + ":" + port + "/receiveMessage",
                              postdata, {'Content-Type': 'application/json'})
         response = urllib2.urlopen(req).read()
+        print(response)
         if (response.find('0') != -1): # successful
             print "Message sent to client: " + destination
             with sqlite3.connect(DB_STRING) as c:
-                 c.execute("INSERT INTO msg_sent(sender, destination, msg, stamp) VALUES (?,?,?,?)",
+                 c.execute("INSERT INTO msg(sender, destination, msg, stamp) VALUES (?,?,?,?)",
                  [cherrypy.session['username'], destination, message, stamp])
             raise cherrypy.HTTPRedirect("/home")
 
@@ -230,7 +253,7 @@ class MainApp(object):
             profile_info = cur.fetchone()
             postdata = self.jsonEncodeProfile(profile_info[0],profile_info[1],profile_info[2],profile_info[3],profile_info[4])
             print("Somebody grabbed your profile details!")
-            return postdata # need more testing, seems to be 'encoding twice' or have \" instead of " ......
+            return postdata #TODO: need more testing, seems to be 'encoding twice' or have (\") instead of ("), according to Insomnia
         except:
             print("Somebody TRIED to grab your profile details.")
             return "You aren't encoding your POST request to me with JSON, git gud"
@@ -304,7 +327,7 @@ class MainApp(object):
     def displayReceivedMessage(self):
         c = sqlite3.connect(DB_STRING)
         cur = c.cursor()
-        cur.execute("SELECT sender, msg, stamp FROM msg_received WHERE destination=?",
+        cur.execute("SELECT sender, msg, stamp FROM msg WHERE destination=?",
         [cherrypy.session['username']])
         msg_list = cur.fetchall()
         messages = ''
@@ -317,7 +340,7 @@ class MainApp(object):
     def displaySentMessage(self):
         c = sqlite3.connect(DB_STRING)
         cur = c.cursor()
-        cur.execute("SELECT destination, msg, stamp FROM msg_sent WHERE sender=?",
+        cur.execute("SELECT destination, msg, stamp FROM msg WHERE sender=?",
         [cherrypy.session['username']])
         msg_list = cur.fetchall()
         messages = ''
@@ -357,7 +380,7 @@ class MainApp(object):
             timeSince = int(timeSince / 3600)
             units = ' hour(s) ago'
         elif timeSince >= 86400 and timeSince < 604800:
-            timeSince = int(timeSince / 86400)
+            timeSince = timeSince / 86400
             units = ' day(s) ago'
         else:
             return "A very long time ago"
