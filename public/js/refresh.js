@@ -6,4 +6,17 @@ $(document).ready(function () {
         $("#received-message-list").load("./displayReceivedMessage");
         $("#sent-message-list").load("./displaySentMessage")
     }, 30000);
+
+    setInterval(function() { // takes currently opened chat window and feeds username out
+        var personName = $('.right .top').find('.name').text();
+        $.ajax({
+          type: 'GET',
+          url: './getChatConvo?username='+personName,
+          success: function(data){
+            console.log("success",data);
+            $(".chat").html(data);
+          }
+        });
+        }, 10000);
+
 });

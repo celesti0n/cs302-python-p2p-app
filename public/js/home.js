@@ -15,8 +15,9 @@ $(document).ready(function() {
               $(".chat").html(data);
             }
           });
-          $(".chat").scrollTop($(".chat")[0].scrollHeight);
-          //$(".chat").prop({ scrollTop: $(".chat").prop("scrollHeight") });
+          $('.left .person').removeClass('active');
+          $(this).addClass('active'); //whoever got clicked is now the 'active' chat, refer to refresh.js to how its used to refresh convos
+
           // $('.chat').animate({
           //          scrollTop: $(".chat").prop("scrollHeight")}, 0
           //       );

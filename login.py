@@ -225,7 +225,7 @@ class MainApp(object):
         #     cherrypy.request.json['destination'])
 
     @cherrypy.expose
-    def sendMessage(self, destination, message, stamp=time.time()):
+    def sendMessage(self, destination, message):
         # look up the 'destination' user in database and retrieve his corresponding ip address and port
         c = sqlite3.connect(DB_STRING)
         cur = c.cursor()
@@ -237,7 +237,7 @@ class MainApp(object):
             ip = values_tuple[0][0]
             port = values_tuple[0][1]
             # message data must be encoded into JSON
-            postdata = self.jsonEncodeMessage(cherrypy.session['username'], message, destination, stamp)
+            postdata = self.jsonEncodeMessage(cherrypy.session['username'], message, destination, int(time.time()))
             req = urllib2.Request("http://" + ip + ":" + port + "/receiveMessage",
                                  postdata, {'Content-Type': 'application/json'})
             try:
@@ -248,7 +248,7 @@ class MainApp(object):
             print "Message sent to client: " + destination
             with sqlite3.connect(DB_STRING) as c:
                  c.execute("INSERT INTO msg(sender, destination, msg, stamp) VALUES (?,?,?,?)",
-                 [cherrypy.session['username'], destination, message, stamp])
+                 [cherrypy.session['username'], destination, message, int(time.time())])
             raise cherrypy.HTTPRedirect("/home")
         else:
             return "something happened"
@@ -312,7 +312,7 @@ class MainApp(object):
             description = profile_info[0][2]
             location = profile_info[0][3]
             picture = profile_info[0][4]
-            return "Profile Picture: " + str(picture) + '<br />' + "Full Name: " + str(fullname) + '<br />' + \
+            return 'Profile Picture: <br />' +'<img src="' + picture + '" height="64" width="64">' + '<br />' + "Full Name: " + str(fullname) + '<br />' + \
             "Position: " + str(position) + '<br />' + "Description: " + str(description) + '<br />' + "Location: " + str(location)
         except: # if currently logged on user has never used this client, insert placeholders into the db and call function again
             with sqlite3.connect(DB_STRING) as c:
@@ -331,11 +331,10 @@ class MainApp(object):
         print(cherrypy.session['username'])
         raise cherrypy.HTTPRedirect("/myProfile")
 
+    # @cherrypy.expose
+    # @cherrypy.tools.json_in() # takes in sender, destination, file, filname, content_type, stamp, hashing
+    # def receiveFile(self):
 
-    def authoriseUserLogin(self,username, password, location, ip, port):
-        params = {'username':username, 'password':password, 'location':location, 'ip':ip, 'port':port}
-        full_url = 'http://cs302.pythonanywhere.com/report?' + urllib.urlencode(params)  #  converts to format &a=b&c=d...
-        return urllib2.urlopen(full_url).read()
 
     @cherrypy.expose
     def displayReceivedMessage(self):
@@ -394,6 +393,10 @@ class MainApp(object):
             return "A very long time ago"
         return str(timeSince) + units
 
+    def authoriseUserLogin(self,username, password, location, ip, port):
+        params = {'username':username, 'password':password, 'location':location, 'ip':ip, 'port':port}
+        full_url = 'http://cs302.pythonanywhere.com/report?' + urllib.urlencode(params)  #  converts to format &a=b&c=d...
+        return urllib2.urlopen(full_url).read()
 conf = {
         '/': {
             'tools.sessions.on': True,
