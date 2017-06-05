@@ -15,6 +15,11 @@ $(document).ready(function() {
               $(".chat").html(data);
             }
           });
+          $(".chat").scrollTop($(".chat")[0].scrollHeight);
+          //$(".chat").prop({ scrollTop: $(".chat").prop("scrollHeight") });
+          // $('.chat').animate({
+          //          scrollTop: $(".chat").prop("scrollHeight")}, 0
+          //       );
           // $(".chat").html(conversation);
           //$(".chat").load(location.href + " #chat");
       }

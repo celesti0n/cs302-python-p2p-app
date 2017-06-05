@@ -115,21 +115,27 @@ class MainApp(object):
         return total_users_string
 
     @cherrypy.expose
-    def getChatConvo(self, username='hone075'):
-        # get conversation between somebody and the logged in user.
-        c = sqlite3.connect(DB_STRING)
-        cur = c.cursor()
-        cur.execute("SELECT sender, destination, msg FROM msg ORDER BY stamp ASC")
+    def getChatConvo(self, username='entry'):
         conversation = ''
-        for row in cur:
-            if (username == row[0]): # if the message belongs to the sender, call the div that styles left bubble
-                conversation += '<div class="bubble you">'
-                conversation += row[2] + '</div>'
-            elif (username == row[1]): # if the message belongs to me, call right bubble
-                conversation += '<div class="bubble me">'
-                conversation += row[2] + '</div>'
-        print(str(conversation))
-        return str(conversation)
+        if (username == 'entry'): # on first start of app, hardcode conversation
+            conversation += '<div class="bubble you">'
+            conversation += 'Welcome to fort secure chat!' + '</div>'
+            conversation += '<div class="bubble you">'
+            conversation += 'To start, please choose a user to chat with on the left.' + '</div>'
+            return str(conversation)
+        else:
+            # get conversation between somebody and the logged in user.
+            c = sqlite3.connect(DB_STRING)
+            cur = c.cursor()
+            cur.execute("SELECT sender, destination, msg FROM msg ORDER BY stamp ASC")
+            for row in cur:
+                if (username == row[0]): # if the message belongs to the sender, call the div that styles left bubble
+                    conversation += '<div class="bubble you">'
+                    conversation += row[2] + '</div>'
+                elif (username == row[1]): # if the message belongs to me, call right bubble
+                    conversation += '<div class="bubble me">'
+                    conversation += row[2] + '</div>'
+            return str(conversation)
 
     @cherrypy.expose
     def getList(self):
@@ -223,23 +229,29 @@ class MainApp(object):
         # look up the 'destination' user in database and retrieve his corresponding ip address and port
         c = sqlite3.connect(DB_STRING)
         cur = c.cursor()
-        cur.execute("SELECT ip, port FROM user_string WHERE username=?",
-                    [destination])
+        cur.execute("SELECT ip, port FROM user_string WHERE username=?",[destination])
         values_tuple = cur.fetchall()
-        ip = values_tuple[0][0]
-        port = values_tuple[0][1]
-        # message data must be encoded into JSON
-        postdata = self.jsonEncodeMessage(cherrypy.session['username'], message, destination, stamp)
-        req = urllib2.Request("http://" + ip + ":" + port + "/receiveMessage",
-                             postdata, {'Content-Type': 'application/json'})
-        response = urllib2.urlopen(req).read()
-        print(response)
+        if not values_tuple: # if either ip and port is empty
+            return "3: Client Currently Unavailable"
+        else:
+            ip = values_tuple[0][0]
+            port = values_tuple[0][1]
+            # message data must be encoded into JSON
+            postdata = self.jsonEncodeMessage(cherrypy.session['username'], message, destination, stamp)
+            req = urllib2.Request("http://" + ip + ":" + port + "/receiveMessage",
+                                 postdata, {'Content-Type': 'application/json'})
+            try:
+                response = urllib2.urlopen(req).read()
+            except:
+                return "5: Timeout Error"
         if (response.find('0') != -1): # successful
             print "Message sent to client: " + destination
             with sqlite3.connect(DB_STRING) as c:
                  c.execute("INSERT INTO msg(sender, destination, msg, stamp) VALUES (?,?,?,?)",
                  [cherrypy.session['username'], destination, message, stamp])
             raise cherrypy.HTTPRedirect("/home")
+        else:
+            return "something happened"
 
     @cherrypy.expose
     @cherrypy.tools.json_in() # profile_username input is stored in cherrypy.request.json['profile_username']
@@ -251,7 +263,9 @@ class MainApp(object):
             cur.execute("SELECT fullname, position, description, location, picture FROM profiles WHERE profile_username=?",
                         [cherrypy.request.json['profile_username']])
             profile_info = cur.fetchone()
-            postdata = self.jsonEncodeProfile(profile_info[0],profile_info[1],profile_info[2],profile_info[3],profile_info[4])
+            postdata = {"fullname": profile_info[0], "position":profile_info[1],
+                        "description":profile_info[2],"location":profile_info[3],
+                        "picture":profile_info[4]}
             print("Somebody grabbed your profile details!")
             return postdata #TODO: need more testing, seems to be 'encoding twice' or have (\") instead of ("), according to Insomnia
         except:
@@ -332,7 +346,7 @@ class MainApp(object):
         msg_list = cur.fetchall()
         messages = ''
         for i in range(0, len(msg_list)):
-            messages += '<b>' + str(msg_list[i][0]) + '</b>' + " at " + str(self.epochFormat(msg_list[i][2])) + \
+            messages += '<b>' + str(msg_list[i][0]) + '</b>' + " at " + self.epochFormat(msg_list[i][2]) + \
             " (" + str(self.timeSinceMessage(msg_list[i][2])) + ")" + " messaged you: " + str(msg_list[i][1]) + "<br />"
         return messages
 
@@ -345,7 +359,7 @@ class MainApp(object):
         msg_list = cur.fetchall()
         messages = ''
         for i in range(0, len(msg_list)):
-            messages += 'You sent ' + '<b>' + str(msg_list[i][0]) + '</b>' + " at " + str(self.epochFormat(msg_list[i][2])) + \
+            messages += 'You sent ' + '<b>' + str(msg_list[i][0]) + '</b>' + " at " + self.epochFormat(msg_list[i][2]) + \
             " (" + str(self.timeSinceMessage(msg_list[i][2])) + ")" + " this: " + str(msg_list[i][1]) + "<br />"
         return messages
 
@@ -354,19 +368,13 @@ class MainApp(object):
         data = json.dumps(output_dict)
         return data
 
-    def jsonEncodeProfile(self, fullname, position, description, location, picture):
-        output_dict = { "fullname": fullname, "position": position, "description": description, "location": location, "picture": picture}
-        data = json.dumps(output_dict)
-        print(data)
-        return data
-
     def jsonEncodeUsername(self, profile_username):
         output_dict = {"profile_username": profile_username}
         data = json.dumps(output_dict)
         return data
 
     def epochFormat(self, timeStamp):
-        return datetime.datetime.fromtimestamp(timeStamp).strftime('%Y-%m-%d %H:%M:%S')
+        return datetime.datetime.fromtimestamp(timeStamp).strftime('%Y-%m-%d %H:%M:%S').encode('ascii', 'ignore')
 
     def timeSinceMessage(self, timeStamp):
         timeSince = time.time() - timeStamp
@@ -384,10 +392,7 @@ class MainApp(object):
             units = ' day(s) ago'
         else:
             return "A very long time ago"
-
         return str(timeSince) + units
-
-
 
 conf = {
         '/': {
