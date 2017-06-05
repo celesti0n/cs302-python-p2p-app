@@ -374,7 +374,7 @@ class MainApp(object):
             return "3: Client Currently Unavailable"
         # check if their listAPI contains receiveFile, or the function won't work
         if (self.checkListAPI(destination, 'receiveFile')): # if they do have receiveFile
-            file_dict = {"sender": cherrypy.session['username'], "destination": destination, "file": base64.b64encode(bytes(file)),
+            file_dict = {"sender": cherrypy.session['username'], "destination": destination, "file": base64.b64encode(file.file.read()),
                         "filename": str(file.filename), "content_type": str(file.content_type), "stamp": int(time.time())}
             print(file_dict)
             params = json.dumps(file_dict)
@@ -385,8 +385,8 @@ class MainApp(object):
                 print ("Sent file to " + str(destination))
                 with sqlite3.connect(DB_STRING) as c:
                      c.execute("INSERT INTO files(sender, destination, file, filename, content_type, stamp) VALUES (?,?,?,?,?,?)",
-                     (cherrypy.session['username'], destination, base64.b64encode(bytes(file)), str(file.filename),
-                      str(file.content_type), int(time.time())))
+                     (cherrypy.session['username'], destination, str(base64.b64encode(file.file.read())), str(file.filename),
+                      str(file.content_type), int(time.time()))) # TODO: file in base64 is NOT being saved right now!!
                 print("A file was sent to: " + destination)
                 raise cherrypy.HTTPRedirect("/files")
             else:
