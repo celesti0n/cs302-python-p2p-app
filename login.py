@@ -347,44 +347,50 @@ class MainApp(object):
     @cherrypy.tools.json_in() # takes in sender, destination, file, filename, content_type, stamp
     def receiveFile(self):
         filesize = os.stat(cherrypy.request.json['file'])
-        if filesize.st_size > 5242880:     # restrict to files only < 5MB in size
+        if int(filesize.st_size) > 5242880:     # restrict to files only < 5MB in size
             return 'The file you are trying to send is too big. Files must be less than 5MB in size.'
-        try:
-            with sqlite3.connect(DB_STRING) as c:
-                 c.execute("INSERT INTO files(sender, destination, file, filename, content_type, stamp) VALUES (?,?,?,?,?,?)",
-                 (cherrypy.request.json['sender'], cherrypy.request.json['destination'], cherrypy.request.json['file'],
-                 cherrypy.request.json['filename'], cherrypy.request.json['content_type'], cherrypy.request.json['stamp']))
-            print ("Received file from" + str(sender))
-            return '0'
-        except:
-            return 'An error occurred'
+        else:
+            try:
+                with sqlite3.connect(DB_STRING) as c:
+                     c.execute("INSERT INTO files(sender, destination, file, filename, content_type, stamp) VALUES (?,?,?,?,?,?)",
+                     [cherrypy.request.json['sender'], cherrypy.request.json['destination'], cherrypy.request.json['file'],
+                     cherrypy.request.json['filename'], cherrypy.request.json['content_type'], cherrypy.request.json['stamp']])
+                print ("Received file from: " + str(cherrypy.request.json['sender']))
+                return '0'
+            except:
+                return 'An error occurred'
 
     @cherrypy.expose
-    def sendFile(self, destination, file, filename, content_type):
+    def sendFile(self, destination, file): # get filename and content_type from uploaded file
         #get ip and port of target user
-        c = sqlite3.connect(DB_STRING)
-        cur = c.cursor()
-        cur.execute("SELECT ip, port FROM user_string WHERE username=?",[destination])
-        values_tuple = cur.fetchall()
-        ip = values_tuple[0][0]
-        port = values_tuple[0][1]
+        try:
+            c = sqlite3.connect(DB_STRING)
+            cur = c.cursor()
+            cur.execute("SELECT ip, port FROM user_string WHERE username=?",[destination])
+            values_tuple = cur.fetchall()
+            ip = values_tuple[0][0]
+            port = values_tuple[0][1]
+        except:
+            return "3: Client Currently Unavailable"
         # check if their listAPI contains receiveFile, or the function won't work
-        if (checkListAPI(destination, 'receiveFile')): # if they do have receiveFile
-            try:
-                file_dict = {"sender": cherrypy.session['username'], "destination": destination, "file": base64.b64encode(file), "filename": filename,
-                            "content_type": content_type, "stamp": int(time.time())}
-                params = json.dumps(file_dict)
-                req = urllib2.Request("http://" + ip + ":" + port + "/receiveFile",
-                      params, {'Content-Type': 'application/json'})
-                response = urllib2.urlopen(req).read()
-                if (response.find('0') != -1): # successful
-                    print ("Sent file to " + str(destination))
-                    with sqlite3.connect(DB_STRING) as c:
-                         c.execute("INSERT INTO files(sender, destination, file, filename, content_type, stamp) VALUES (?,?,?,?,?,?)",
-                         (cherrypy.session['username'], destination, file, filename, content_type, int(time.time())))
-                    raise cherrypy.HTTPRedirect("/files")
-            except:
-                return "An error occurred when attempting to JSON encode and send the file"
+        if (self.checkListAPI(destination, 'receiveFile')): # if they do have receiveFile
+            file_dict = {"sender": cherrypy.session['username'], "destination": destination, "file": base64.b64encode(bytes(file)),
+                        "filename": str(file.filename), "content_type": str(file.content_type), "stamp": int(time.time())}
+            print(file_dict)
+            params = json.dumps(file_dict)
+            req = urllib2.Request("http://" + ip + ":" + port + "/receiveFile",
+                  params, {'Content-Type': 'application/json'})
+            response = urllib2.urlopen(req).read()
+            if (response.find('0') != -1): # successful
+                print ("Sent file to " + str(destination))
+                with sqlite3.connect(DB_STRING) as c:
+                     c.execute("INSERT INTO files(sender, destination, file, filename, content_type, stamp) VALUES (?,?,?,?,?,?)",
+                     (cherrypy.session['username'], destination, base64.b64encode(bytes(file)), str(file.filename),
+                      str(file.content_type), int(time.time())))
+                print("A file was sent to: " + destination)
+                raise cherrypy.HTTPRedirect("/files")
+            else:
+                return response
         else: # no receiveFile
             return 'This user has not implemented receiveFile yet'
 
@@ -398,8 +404,10 @@ class MainApp(object):
             file_list = cur.fetchall()
             files =''
             for i in range(0, len(file_list)):
-                files += 'From' + '<b>' + str(sender) + '</b>' + ': <br />' + str(file) + '<br />' + str(filename) \
-                + '<br />' + str(content_type) + '<br />' + str(stamp) + '<br />'
+                files += 'From: ' + '<b>' + str(file_list[i][0]) + '</b>' + \
+                '<br /><img src="data:"' + str(file_list[i][3]) + ';base64, ' + str(file_list[i][1]) + '"><br />' + \
+                'Name: ' + str(file_list[i][2]) + '<br />' + 'Type: ' + str(file_list[i][3]) + '<br />' + \
+                'Time sent: ' + self.epochFormat(file_list[i][4]) + '<br /><br />'
 
             if not files: # no files were found
                 return 'No files were found.'

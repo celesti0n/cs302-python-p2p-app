@@ -11,19 +11,17 @@
   <a href="./home">fort secure chat</a>
   <a href="./myProfile">USER_NAME's profile</a>
   <a href="#profiles">view profiles</a>
-  <a href="./files">send files</a>
+  <a href="./files">files</a>
   <a href="/logoff/">log off</a></ul>
 </div>
     <h1><center>USER_NAME's files</center></h1><br>
   <center>
     <b>send a file</b><br />
     <div class="form">
-    <form class="login-form" method = "put" action = "/sendFile/">
-      <input type="text" placeholder="who do you want to send to?" name = "destination"/>
-      <input type="text" placeholder="contents of file" name = "file"/>
-      <input type="text" placeholder="name of file (including extension)" name = "filename"/>
-      <input type="text" placeholder="mimetype, e.g. image/gif, application/octet-stream" name = "content_type"/>
-    <button type = "submit">send file!</button>
+    <form class="login-form" method = "post" action = "/sendFile/" enctype="multipart/form-data">
+      <input type="text" placeholder="recipient of file" name = "destination"/>
+      <input type="file" name = "file"/>
+    <button type = "submit" value="Send">send file!</button>
     </form>
   </div>
       <form class="login-form" method = "get" action = "/listUsers/">
@@ -31,7 +29,8 @@
     </form></center>
     <hr>
     <b>View/download your received files!</b>
-    <br>
+    <br /><br />
     USER_FILES
+    <br />
 </body>
 </html>
