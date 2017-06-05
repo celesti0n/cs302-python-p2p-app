@@ -9,6 +9,10 @@ $(document).ready(function () {
 
     setInterval(function() { // takes currently opened chat window and feeds username out
         var personName = $('.right .top').find('.name').text();
+        if (personName == 'mwon724') { // still on the starting screen
+          return false;
+        }
+        else {
         $.ajax({
           type: 'GET',
           url: './getChatConvo?username='+personName,
@@ -17,6 +21,7 @@ $(document).ready(function () {
             $(".chat").html(data);
           }
         });
+        }
         }, 10000);
 
 });

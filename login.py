@@ -105,13 +105,14 @@ class MainApp(object):
         total_users = len(total_users_list)
         total_users_string = ''
         for i in range(0, total_users):
-            with sqlite3.connect(DB_STRING) as c:
-                 c.execute("INSERT INTO total_users(username) VALUES (?)",
-                 [total_users_list[i]])
-            total_users_string += '<li class="person"' + str(i+1) + '">' + \
-            '<img src="http://imgur.com/oymng0G.jpg" alt="" />' + '<span class="name">' + \
-            str(total_users_list[i]) + '</span>' + \
-            '<span class="preview">' + "LAST_ONLINE_TIMESTAMP" + '</span></li>'
+            if total_users_list[i] != cherrypy.session['username']: # don't add the current user to list of possible contacts
+                with sqlite3.connect(DB_STRING) as c:
+                     c.execute("INSERT INTO total_users(username) VALUES (?)",
+                     [total_users_list[i]])
+                total_users_string += '<li class="person"' + str(i+1) + '">' + \
+                '<img src="http://imgur.com/oymng0G.jpg" alt="" />' + '<span class="name">' + \
+                str(total_users_list[i]) + '</span>' + \
+                '<span class="preview">' + "LAST_ONLINE_TIMESTAMP" + '</span></li>'
         return total_users_string
 
     @cherrypy.expose
