@@ -12,6 +12,7 @@ import socket
 import sys
 import datetime
 import atexit
+import base64
 
 from json import load
 from urllib2 import urlopen
@@ -64,8 +65,17 @@ class MainApp(object):
         f.close()
         data = data.replace("USER_NAME", cherrypy.session['username'])
         data = data.replace("PROFILE_DETAILS", self.displayProfile())
+        data = data.replace("USER_FILES", self.displayFile())
         return data
 
+    @cherrypy.expose
+    def files(self):
+        f = open("files.html", "r")
+        data = f.read()
+        f.close()
+        data = data.replace("USER_NAME", cherrypy.session['username'])
+        data = data.replace("USER_FILES", self.displayFile())
+        return data
 
     @cherrypy.expose
     def report(self, username, password, location='2', ip='180.148.96.53', port=listen_port): # change ip = back to listen_ip
@@ -208,7 +218,8 @@ class MainApp(object):
 
     @cherrypy.expose
     def listAPI(self):
-        return '/ping /listAPI /receiveMessage [sender] [destination] [message] [stamp] /getProfile [profile_username]'
+        return '/ping /listAPI /receiveMessage [sender] [destination] [message] [stamp] /getProfile [profile_username]'+ \
+        ' /receiveFile [sender] [destination] [file] [filename] [content_type] [stamp]'
 
     @cherrypy.expose
     @cherrypy.tools.json_in() # read documentation, all json input parameters stored in cherrypy.request.json
@@ -267,7 +278,7 @@ class MainApp(object):
             postdata = {"fullname": profile_info[0], "position":profile_info[1],
                         "description":profile_info[2],"location":profile_info[3],
                         "picture":profile_info[4]}
-            print("Somebody grabbed your profile details!")
+            print("Someone grabbed your profile details!")
             return postdata #TODO: need more testing, seems to be 'encoding twice' or have (\") instead of ("), according to Insomnia
         except:
             print("Somebody TRIED to grab your profile details.")
@@ -332,9 +343,69 @@ class MainApp(object):
         print(cherrypy.session['username'])
         raise cherrypy.HTTPRedirect("/myProfile")
 
-    # @cherrypy.expose
-    # @cherrypy.tools.json_in() # takes in sender, destination, file, filname, content_type, stamp, hashing
-    # def receiveFile(self):
+    @cherrypy.expose
+    @cherrypy.tools.json_in() # takes in sender, destination, file, filename, content_type, stamp
+    def receiveFile(self):
+        filesize = os.stat(cherrypy.request.json['file'])
+        if filesize.st_size > 5242880:     # restrict to files only < 5MB in size
+            return 'The file you are trying to send is too big. Files must be less than 5MB in size.'
+        try:
+            with sqlite3.connect(DB_STRING) as c:
+                 c.execute("INSERT INTO files(sender, destination, file, filename, content_type, stamp) VALUES (?,?,?,?,?,?)",
+                 (cherrypy.request.json['sender'], cherrypy.request.json['destination'], cherrypy.request.json['file'],
+                 cherrypy.request.json['filename'], cherrypy.request.json['content_type'], cherrypy.request.json['stamp']))
+            print ("Received file from" + str(sender))
+            return '0'
+        except:
+            return 'An error occurred'
+
+    @cherrypy.expose
+    def sendFile(self, destination, file, filename, content_type):
+        #get ip and port of target user
+        c = sqlite3.connect(DB_STRING)
+        cur = c.cursor()
+        cur.execute("SELECT ip, port FROM user_string WHERE username=?",[destination])
+        values_tuple = cur.fetchall()
+        ip = values_tuple[0][0]
+        port = values_tuple[0][1]
+        # check if their listAPI contains receiveFile, or the function won't work
+        if (checkListAPI(destination, 'receiveFile')): # if they do have receiveFile
+            try:
+                file_dict = {"sender": cherrypy.session['username'], "destination": destination, "file": base64.b64encode(file), "filename": filename,
+                            "content_type": content_type, "stamp": int(time.time())}
+                params = json.dumps(file_dict)
+                req = urllib2.Request("http://" + ip + ":" + port + "/receiveFile",
+                      params, {'Content-Type': 'application/json'})
+                response = urllib2.urlopen(req).read()
+                if (response.find('0') != -1): # successful
+                    print ("Sent file to " + str(destination))
+                    with sqlite3.connect(DB_STRING) as c:
+                         c.execute("INSERT INTO files(sender, destination, file, filename, content_type, stamp) VALUES (?,?,?,?,?,?)",
+                         (cherrypy.session['username'], destination, file, filename, content_type, int(time.time())))
+                    raise cherrypy.HTTPRedirect("/files")
+            except:
+                return "An error occurred when attempting to JSON encode and send the file"
+        else: # no receiveFile
+            return 'This user has not implemented receiveFile yet'
+
+    @cherrypy.expose
+    def displayFile(self):
+        try:
+            c = sqlite3.connect(DB_STRING)
+            cur = c.cursor()
+            cur.execute("SELECT sender, file, filename, content_type, stamp FROM files WHERE destination=?",
+            [cherrypy.session['username']])
+            file_list = cur.fetchall()
+            files =''
+            for i in range(0, len(file_list)):
+                files += 'From' + '<b>' + str(sender) + '</b>' + ': <br />' + str(file) + '<br />' + str(filename) \
+                + '<br />' + str(content_type) + '<br />' + str(stamp) + '<br />'
+
+            if not files: # no files were found
+                return 'No files were found.'
+            return files
+        except:
+            return 'An error occurred when attempting to display files'
 
 
     @cherrypy.expose
@@ -349,6 +420,21 @@ class MainApp(object):
             messages += '<b>' + str(msg_list[i][0]) + '</b>' + " at " + self.epochFormat(msg_list[i][2]) + \
             " (" + str(self.timeSinceMessage(msg_list[i][2])) + ")" + " messaged you: " + str(msg_list[i][1]) + "<br />"
         return messages
+
+    @cherrypy.expose
+    def checkListAPI(self, username, string):
+        # this function calls the user's /listAPI looking for the string.
+        # the function returns True if the string is found, and False if the string is not found.
+        c = sqlite3.connect(DB_STRING)
+        cur = c.cursor()
+        cur.execute("SELECT ip, port FROM user_string WHERE username=?",[username])
+        values_tuple = cur.fetchall()
+        api_call = 'http://' + values_tuple[0][0] + ':' + values_tuple[0][1] + '/listAPI'
+        response = urllib2.urlopen(api_call).read()
+        if response.find(string) != -1:  # successful in finding string
+            return True
+        else:
+            return False
 
     @cherrypy.expose
     def displaySentMessage(self):
@@ -380,15 +466,16 @@ class MainApp(object):
         timeSince = time.time() - timeStamp
         units = ''
         if timeSince < 60:
+            timeSince = int(round(timeSince))
             units = ' second(s) ago'
         elif timeSince >= 60 and timeSince < 3600:
-            timeSince = int(timeSince / 60)
+            timeSince = int(round(timeSince / 60))
             units = ' minute(s) ago'
         elif timeSince >= 3600 and timeSince < 86400:
-            timeSince = int(timeSince / 3600)
+            timeSince = int(round(timeSince / 3600))
             units = ' hour(s) ago'
         elif timeSince >= 86400 and timeSince < 604800:
-            timeSince = timeSince / 86400
+            timeSince = int(round(timeSince / 86400))
             units = ' day(s) ago'
         else:
             return "A very long time ago"
