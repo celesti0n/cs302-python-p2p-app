@@ -346,8 +346,8 @@ class MainApp(object):
     @cherrypy.expose
     @cherrypy.tools.json_in() # takes in sender, destination, file, filename, content_type, stamp
     def receiveFile(self):
-        filesize = os.stat(cherrypy.request.json['file'])
-        if int(filesize.st_size) > 5242880:     # restrict to files only < 5MB in size
+        filesize = os.path.getsize(cherrypy.request.json['file'])
+        if filesize > 5242880:     # restrict to files only < 5MB in size
             return 'The file you are trying to send is too big. Files must be less than 5MB in size.'
         else:
             try:
@@ -383,11 +383,6 @@ class MainApp(object):
             response = urllib2.urlopen(req).read()
             if (response.find('0') != -1): # successful
                 print ("Sent file to " + str(destination))
-                with sqlite3.connect(DB_STRING) as c:
-                     c.execute("INSERT INTO files(sender, destination, file, filename, content_type, stamp) VALUES (?,?,?,?,?,?)",
-                     (cherrypy.session['username'], destination, str(base64.b64encode(file.file.read())), str(file.filename),
-                      str(file.content_type), int(time.time()))) # TODO: file in base64 is NOT being saved right now!!
-                print("A file was sent to: " + destination)
                 raise cherrypy.HTTPRedirect("/files")
             else:
                 return response
