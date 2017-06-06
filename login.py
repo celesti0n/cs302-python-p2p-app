@@ -19,7 +19,6 @@ from urllib2 import urlopen
 
 import cherrypy
 from cherrypy.lib import auth_digest
-import db_management
 import encrypt
 
 DB_STRING = "users.db"
@@ -555,8 +554,6 @@ if __name__ == '__main__':
                                 'tools.gzip.on' : True,
                                 'tools.gzip.mime_types' : ['text/*'],
                                })
-        cherrypy.engine.subscribe('start', db_management.setup_users_database)
-        cherrypy.engine.subscribe('stop', db_management.cleanup_users_database)
         cherrypy.tree.mount(MainApp(), '/', conf)
         cherrypy.engine.start()
         cherrypy.engine.block()
