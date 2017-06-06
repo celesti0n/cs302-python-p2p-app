@@ -418,10 +418,9 @@ class MainApp(object):
             files =''
             for i in range(0, len(file_list)):
                 files += 'From: ' + '<b>' + str(file_list[i][0]) + '</b>' + \
-                '<br /><img src="data:"' + str(file_list[i][3]) + ';base64, ' + str(file_list[i][1]) + '"><br />' + \
+                '<br /><img alt="image" height="120" width="120" src="data:' + str(file_list[i][3]) + ';base64,' + str(file_list[i][1]) + '"><br />' + \
                 'Name: ' + str(file_list[i][2]) + '<br />' + 'Type: ' + str(file_list[i][3]) + '<br />' + \
                 'Time sent: ' + self.epochFormat(file_list[i][4]) + '<br /><br />'
-
             if not files: # no files were found
                 return 'No files were found.'
             return files
