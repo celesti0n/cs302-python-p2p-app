@@ -374,19 +374,15 @@ class MainApp(object):
     @cherrypy.expose
     @cherrypy.tools.json_in() # takes in sender, destination, file, filename, content_type, stamp
     def receiveFile(self):
-        filesize = os.path.getsize(cherrypy.request.json['file'])
-        if filesize > 5242880:     # restrict to files only < 5MB in size
-            return 'The file you are trying to send is too big. Files must be less than 5MB in size.'
-        else:
-            try:
-                with sqlite3.connect(DB_STRING) as c:
-                     c.execute("INSERT INTO files(sender, destination, file, filename, content_type, stamp) VALUES (?,?,?,?,?,?)",
-                     [cherrypy.request.json['sender'], cherrypy.request.json['destination'], cherrypy.request.json['file'],
-                     cherrypy.request.json['filename'], cherrypy.request.json['content_type'], cherrypy.request.json['stamp']])
-                print ("Received file from: " + str(cherrypy.request.json['sender']))
-                return '0'
-            except:
-                return 'An error occurred'
+        try:
+            with sqlite3.connect(DB_STRING) as c:
+                 c.execute("INSERT INTO files(sender, destination, file, filename, content_type, stamp) VALUES (?,?,?,?,?,?)",
+                 [cherrypy.request.json['sender'], cherrypy.request.json['destination'], cherrypy.request.json['file'],
+                 cherrypy.request.json['filename'], cherrypy.request.json['content_type'], cherrypy.request.json['stamp']])
+            print ("Received file from: " + str(cherrypy.request.json['sender']))
+            return '0'
+        except:
+            return 'An error occurred'
 
     file_sent = 0
     @cherrypy.expose
@@ -430,11 +426,29 @@ class MainApp(object):
             [cherrypy.session['username']])
             file_list = cur.fetchall()
             files =''
+
             for i in range(0, len(file_list)):
-                files += 'From: ' + '<b>' + str(file_list[i][0]) + '</b>' + \
-                '<br /><img alt="image" height="120" width="120" src="data:' + str(file_list[i][3]) + ';base64,' + str(file_list[i][1]) + '"><br />' + \
-                'Name: ' + str(file_list[i][2]) + '<br />' + 'Type: ' + str(file_list[i][3]) + '<br />' + \
-                'Time sent: ' + self.epochFormat(file_list[i][4]) + '<br /><br />'
+                # if file has mimetype starting with 'image/', use <img> tag to display
+                if ("image/" in str(file_list[i][3])):
+                    files += 'From: ' + '<b>' + str(file_list[i][0]) + '</b>' + \
+                    '<br /><img alt="image" height="120" width="120" src="data:' + str(file_list[i][3]) + ';base64,' + str(file_list[i][1]) + '"><br />' + \
+                    'Name: ' + str(file_list[i][2]) + '<br />' + 'Type: ' + str(file_list[i][3]) + '<br />' + \
+                    'Time sent: ' + self.epochFormat(file_list[i][4]) + '<br /><br />'
+                elif ("video/" in str(file_list[i][3])):
+                    files += 'From: ' + '<b>' + str(file_list[i][0]) + '</b>' + \
+                    '<br /><video height="300" width="300" controls><source type="' + str(file_list[i][3]) + '"src="data:' + str(file_list[i][3]) + \
+                    ';base64,' + str(file_list[i][1]) + '"></video>' + '<br /> Name: ' + str(file_list[i][2]) + '<br /> Type: ' + \
+                    str(file_list[i][3]) + '<br /> Time sent: ' + self.epochFormat(file_list[i][4]) + '<br /><br />'
+                elif ("audio/" in str(file_list[i][3])):
+                    files += 'From: ' + '<b>' + str(file_list[i][0]) + '</b>' + \
+                    '<br /><audio controls src="data:' + str(file_list[i][3]) + ';base64,' + str(file_list[i][1]) + '"></audio>' + \
+                    '<br />Name: ' + str(file_list[i][2]) + '<br />' + 'Type: ' + str(file_list[i][3]) + '<br />' + \
+                    'Time sent: ' + self.epochFormat(file_list[i][4]) + '<br /><br />'
+                else: # provide a download link (to say, PDFs)
+                    files += 'From: ' + '<b>' + str(file_list[i][0]) + '</b>' + \
+                    '<br /><a download href="data:' + str(file_list[i][3]) + ';base64,' + str(file_list[i][1]) + '">Download ' + \
+                    str(file_list[i][2]) + '</a>' + '<br />Name: ' + str(file_list[i][2]) + '<br />' + 'Type: ' + \
+                    str(file_list[i][3]) + '<br />' + 'Time sent: ' + self.epochFormat(file_list[i][4]) + '<br /><br />'
             if not files: # no files were found
                 return 'No files were found.'
             return files
