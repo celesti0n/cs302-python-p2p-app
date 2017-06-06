@@ -26,7 +26,7 @@ DB_STRING = "users.db"
 logged_on = 0  # 0 = never tried to log on, 1 = success, 2 = tried and failed, 3 = success and logged out
 reload(sys)
 sys.setdefaultencoding('utf8')
-listen_ip = '192.168.20.2' # socket.gethostbyname(socket.getfqdn())
+listen_ip = '172.23.94.26'# '192.168.20.2' # socket.gethostbyname(socket.getfqdn())
 listen_port = 10002
 
 class MainApp(object):
@@ -75,10 +75,14 @@ class MainApp(object):
         f.close()
         data = data.replace("USER_NAME", cherrypy.session['username'])
         data = data.replace("USER_FILES", self.displayFile())
+        if (self.file_sent == 1):
+            data = data.replace("FILE_STATUS", "File successfully sent.")
+        else:
+            data = data.replace("FILE_STATUS", "")
         return data
 
     @cherrypy.expose
-    def report(self, username, password, location='2', ip='180.148.96.53', port=listen_port): # change ip = back to listen_ip
+    def report(self, username, password, location='1', ip='202.36.244.16', port=listen_port): # change ip = back to listen_ip
         # print(ip)
         hashedPassword = encrypt.hash(password)  # call hash function for SHA256 encryption
         auth = self.authoriseUserLogin(username, hashedPassword, location, ip, port)
@@ -284,7 +288,6 @@ class MainApp(object):
             print("Somebody TRIED to grab your profile details.")
             return "You aren't encoding your POST request to me with JSON, git gud"
 
-
     @cherrypy.expose
     def grabProfile(self, profile_username): #this function is called by me to grab other people's JSON encoded data and decode it to string.
         c = sqlite3.connect(DB_STRING)
@@ -360,6 +363,7 @@ class MainApp(object):
             except:
                 return 'An error occurred'
 
+    file_sent = 0
     @cherrypy.expose
     def sendFile(self, destination, file): # get filename and content_type from uploaded file
         #get ip and port of target user
@@ -373,21 +377,24 @@ class MainApp(object):
         except:
             return "3: Client Currently Unavailable"
         # check if their listAPI contains receiveFile, or the function won't work
-        if (self.checkListAPI(destination, 'receiveFile')): # if they do have receiveFile
-            file_dict = {"sender": cherrypy.session['username'], "destination": destination, "file": base64.b64encode(file.file.read()),
-                        "filename": str(file.filename), "content_type": str(file.content_type), "stamp": int(time.time())}
-            print(file_dict)
-            params = json.dumps(file_dict)
-            req = urllib2.Request("http://" + ip + ":" + port + "/receiveFile",
-                  params, {'Content-Type': 'application/json'})
-            response = urllib2.urlopen(req).read()
-            if (response.find('0') != -1): # successful
-                print ("Sent file to " + str(destination))
-                raise cherrypy.HTTPRedirect("/files")
-            else:
-                return response
-        else: # no receiveFile
-            return 'This user has not implemented receiveFile yet'
+        # if (self.checkListAPI(destination, 'receiveFile')): # if they do have receiveFile
+        file_dict = {"sender": cherrypy.session['username'], "destination": destination, "file": base64.b64encode(file.file.read()),
+                    "filename": str(file.filename), "content_type": str(file.content_type), "stamp": int(time.time())}
+        print(file_dict)
+        params = json.dumps(file_dict)
+        req = urllib2.Request("http://" + ip + ":" + port + "/receiveFile",
+              params, {'Content-Type': 'application/json'})
+        response = urllib2.urlopen(req).read()
+        if (response.find('0') != -1): # successful
+            print ("Sent file to " + str(destination))
+            self.file_sent = 1
+            raise cherrypy.HTTPRedirect("/files")
+
+        else:
+            self.file_sent = 0
+            return 'The user has not reported that the file send was successful.'
+        # else: # no receiveFile
+        #     return 'This user has not implemented receiveFile yet'
 
     @cherrypy.expose
     def displayFile(self):
