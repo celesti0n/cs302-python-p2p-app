@@ -91,7 +91,7 @@ class MainApp(object):
         return data
 
     @cherrypy.expose
-    def report(self, username, password, location='2', ip='202.36.244.16', port=listen_port): # change ip = back to listen_ip
+    def report(self, username, password, location='2', ip='180.148.96.53', port=listen_port): # change ip = back to listen_ip
         # print(ip)
         hashedPassword = encrypt.hash(password)  # call hash function for SHA256 encryption
         auth = self.authoriseUserLogin(username, hashedPassword, location, ip, port)
@@ -155,11 +155,11 @@ class MainApp(object):
             conversation += '<div class="bubble you">'
             conversation += 'Welcome to fort secure chat!' + '</div>'
             conversation += '<div class="bubble you">'
-            conversation += 'To start, please choose a user to chat with on the left.' + '</div>'
+            conversation += 'To start, choose a user to chat with on the left. Use the enter key to send.' + '</div>'
             conversation += '<div class = "bubble you">'
             conversation += 'You can also view user profiles and send/receive files, just use the top navigation bar.' + '</div>'
             conversation += '<div class = "bubble you">'
-            conversation += 'Thanks for using this service!' + '</div>'
+            conversation += 'Remember to wait 5-10 seconds for your message to appear after sending.' + '</div>'
 
             return str(conversation)
         else:
@@ -197,7 +197,7 @@ class MainApp(object):
                          [username, location, ip, port, epoch_time])
                 except: # somebody is providing pubkey information
                     return "someone is providing pubkey information, store pubkey"
-            return "There are " + str(users_online) + " users online currently."
+            return "There are " + str(users_online) + " users online."
         else:
             return api_call
 
@@ -269,8 +269,9 @@ class MainApp(object):
         # look up the 'destination' user in database and retrieve his corresponding ip address and port
         c = sqlite3.connect(DB_STRING)
         cur = c.cursor()
-        cur.execute("SELECT ip, port FROM user_string WHERE username=?",[str(destination)])
+        cur.execute("SELECT ip, port FROM user_string WHERE username=?",[destination])
         values_tuple = cur.fetchall()
+        print(values_tuple)
         if not values_tuple: # if either ip and port is empty
             return "3: Client Currently Unavailable"
         else:

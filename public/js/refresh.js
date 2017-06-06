@@ -17,11 +17,11 @@ $(document).ready(function () {
           type: 'GET',
           url: './getChatConvo?username='+personName,
           success: function(data){
-            console.log("success",data);
+            console.log("success refreshing conversation");
             $(".chat").html(data);
           }
         });
         }
-        }, 10000);
+      }, 10000);
 
 });
