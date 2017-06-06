@@ -126,8 +126,19 @@ class MainApp(object):
                 total_users_string += '<li class="person"' + str(i+1) + '">' + \
                 '<img src="http://imgur.com/oymng0G.jpg" alt="" />' + '<span class="name">' + \
                 str(total_users_list[i]) + '</span>' + \
-                '<span class="preview">' + "LAST_ONLINE_TIMESTAMP" + '</span></li>'
+                '<span class="preview">' + self.checkLastOnline(total_users_list[i]) + '</span></li>'
         return total_users_string
+
+    def checkLastOnline(self, user):
+        c = sqlite3.connect(DB_STRING)
+        cur = c.cursor()
+        cur.execute("SELECT lastlogin FROM user_string WHERE username=?", [user])
+        credentials = cur.fetchone()
+        if not credentials: # empty found
+            return ''
+        else:
+            return 'Online now!'
+        # refactor this to try and call getStatus, if user provides it then show getStatus, if not then revert to current implem
 
     @cherrypy.expose
     def getChatConvo(self, username='entry'):
@@ -223,7 +234,7 @@ class MainApp(object):
     @cherrypy.expose
     def listAPI(self):
         return '/ping /listAPI /receiveMessage [sender] [destination] [message] [stamp] /getProfile [profile_username]'+ \
-        ' /receiveFile [sender] [destination] [file] [filename] [content_type] [stamp]'
+        ' /receiveFile [sender] [destination] [file] [filename] [content_type] [stamp] /getStatus [profile_username]'
 
     @cherrypy.expose
     @cherrypy.tools.json_in() # read documentation, all json input parameters stored in cherrypy.request.json
