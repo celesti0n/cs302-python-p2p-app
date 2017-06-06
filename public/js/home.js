@@ -18,16 +18,31 @@ $(document).ready(function() {
           $('.left .person').removeClass('active');
           $(this).addClass('active'); //whoever got clicked is now the 'active' chat, refer to refresh.js to how its used to refresh convos
           $('.chat').animate({
-              scrollTop: $('.chat')[0].scrollHeight
+              scrollTop: $('.wrapper')[0].scrollHeight
           });
-          // var height = 0;
-          // $('.chat').each(function(i, value){
-          //     height += parseInt($(this).height());
-          // });
-          //
-          // height += '';
-          //
-          // $('.chat').animate({scrollTop: height});
       }
   });
+  $('.message-form').submit(function (e) {
+    var msg = $('.message-form').find('input[name="message"]').val();
+    var destination =  $('.right .top').find('.name').text();
+    $.ajax({
+      type: 'POST',
+      url: './sendMessage',
+      data: { destination: destination, message: msg},
+      //data: $(this).serialize() //grab form data
+      success: function(e){
+        console.log("successful message sent");
+        $.ajax({
+          type: 'GET',
+          url: './getChatConvo?username='+destination,
+          success: function(data){
+            console.log("success",data);
+            $(".chat").html(data);
+          }
+        });
+      }
+    });
+    e.preventDefault();
+     return false;
+    });
 });

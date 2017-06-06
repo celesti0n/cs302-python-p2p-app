@@ -26,7 +26,7 @@ DB_STRING = "users.db"
 logged_on = 0  # 0 = never tried to log on, 1 = success, 2 = tried and failed, 3 = success and logged out
 reload(sys)
 sys.setdefaultencoding('utf8')
-listen_ip = '172.23.94.26'# '192.168.20.2' # socket.gethostbyname(socket.getfqdn())
+listen_ip = '192.168.20.2' # socket.gethostbyname(socket.getfqdn()) '172.23.94.26'
 listen_port = 10002
 
 class MainApp(object):
@@ -49,7 +49,10 @@ class MainApp(object):
         f = open("home.html", "r")
         data = f.read()
         f.close()
-        data = data.replace("USER_NAME", cherrypy.session['username'])
+        try:
+            data = data.replace("USER_NAME", cherrypy.session['username'])
+        except:
+            return "You are not logged in. Click " + "<a href='/'>here</a> to login"
         data = data.replace("USERS_ONLINE", self.getList())
         data = data.replace("LIST_OF_ONLINE_USERS", self.showList())
         data = data.replace("LIST_OF_TOTAL_USERS", self.listAllUsers())
@@ -63,7 +66,10 @@ class MainApp(object):
         f = open("myProfile.html", "r")
         data = f.read()
         f.close()
-        data = data.replace("USER_NAME", cherrypy.session['username'])
+        try:
+            data = data.replace("USER_NAME", cherrypy.session['username'])
+        except:
+            return "You are not logged in. Click " + "<a href='/'>here</a> to login"
         data = data.replace("PROFILE_DETAILS", self.displayProfile())
         data = data.replace("USER_FILES", self.displayFile())
         return data
@@ -73,7 +79,10 @@ class MainApp(object):
         f = open("files.html", "r")
         data = f.read()
         f.close()
-        data = data.replace("USER_NAME", cherrypy.session['username'])
+        try:
+            data = data.replace("USER_NAME", cherrypy.session['username'])
+        except:
+            return "You are not logged in. Click " + "<a href='/'>here</a> to login"
         data = data.replace("USER_FILES", self.displayFile())
         if (self.file_sent == 1):
             data = data.replace("FILE_STATUS", "File successfully sent.")
@@ -82,7 +91,7 @@ class MainApp(object):
         return data
 
     @cherrypy.expose
-    def report(self, username, password, location='1', ip='202.36.244.16', port=listen_port): # change ip = back to listen_ip
+    def report(self, username, password, location='2', ip='202.36.244.16', port=listen_port): # change ip = back to listen_ip
         # print(ip)
         hashedPassword = encrypt.hash(password)  # call hash function for SHA256 encryption
         auth = self.authoriseUserLogin(username, hashedPassword, location, ip, port)
@@ -101,7 +110,6 @@ class MainApp(object):
             cherrypy.session['ip'] = ip
             cherrypy.session['port'] = port
             cherrypy.session['enc'] = 0  # change these later if deciding to use enc/json/etc.
-            cherrypy.session['json'] = 0
             raise cherrypy.HTTPRedirect('/home')
         else:
             print("ERROR: " + error_code)
@@ -148,6 +156,11 @@ class MainApp(object):
             conversation += 'Welcome to fort secure chat!' + '</div>'
             conversation += '<div class="bubble you">'
             conversation += 'To start, please choose a user to chat with on the left.' + '</div>'
+            conversation += '<div class = "bubble you">'
+            conversation += 'You can also view user profiles and send/receive files, just use the top navigation bar.' + '</div>'
+            conversation += '<div class = "bubble you">'
+            conversation += 'Thanks for using this service!' + '</div>'
+
             return str(conversation)
         else:
             # get conversation between somebody and the logged in user.
@@ -168,7 +181,7 @@ class MainApp(object):
         with sqlite3.connect(DB_STRING) as c:
              c.execute("DELETE FROM user_string") # in order to avoid dupes in table
         params = {'username':cherrypy.session['username'], 'password':cherrypy.session['password'],
-                  'enc':cherrypy.session['enc'], 'json':cherrypy.session['json']}
+                  'enc':cherrypy.session['enc']}
         full_url = 'http://cs302.pythonanywhere.com/getList?' + urllib.urlencode(params)
         api_call = urllib2.urlopen(full_url).read()
         error_code = api_call[0] # error code is always first character in string
@@ -256,7 +269,7 @@ class MainApp(object):
         # look up the 'destination' user in database and retrieve his corresponding ip address and port
         c = sqlite3.connect(DB_STRING)
         cur = c.cursor()
-        cur.execute("SELECT ip, port FROM user_string WHERE username=?",[destination])
+        cur.execute("SELECT ip, port FROM user_string WHERE username=?",[str(destination)])
         values_tuple = cur.fetchall()
         if not values_tuple: # if either ip and port is empty
             return "3: Client Currently Unavailable"
