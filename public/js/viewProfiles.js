@@ -20,4 +20,35 @@ $(document).ready(function() {
       });
     return false;
   });
+
+
+  $('.left .top .write-link').mousedown(function(){ //on search button click
+    var text = $('.search').find('input[name="profile_username"]').val();
+    if(text === "") {
+      alert("You did not specify a profile to search for.");
+      return false;
+    }
+    $('.right .top .name').html(text); //css value at top changes
+    // now send an HTTP get request to call a python function that grabs DB data
+    $.ajax({
+      type: 'POST',
+      url: './grabProfile?profile_username='+text+'&sender='+username,
+      success: function(data){
+        console.log("success getting profile");
+        $(".chat").html(data);
+      },
+      timeout: 2000,
+      error: function(xmlhttprequest, textstatus, message) {
+        if(textstatus==="timeout") {
+          alert("5: Timeout Error, user probably not online");
+        }
+        else {
+          alert("User not found!");
+        }
+      }
+      });
+    return false;
+  });
+
+
 });

@@ -1,4 +1,0 @@
-include LICENSE
-include README.markdown
-include requirements.txt
-include test.py

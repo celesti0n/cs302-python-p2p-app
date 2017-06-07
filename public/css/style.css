@@ -262,6 +262,7 @@ body {
   background-image: url("https://s30.postimg.org/nz9dho0pp/send.png");
   background-repeat: no-repeat;
   background-position: center;
+  cursor: pointer;
 }
 .container .right .bubble {
   font-size: 16px;
@@ -285,4 +286,33 @@ body {
   background-color: #e67e22;
   -ms-flex-item-align: end;
       align-self: flex-end;
+}
+
+/*VIEWPROFILES/LOGS SEARCH BOX STYLING*/
+.search input {
+  outline: 0;
+  background: #f2f2f2; /* slightly grey fields */
+  width: 74.7%;
+  border: 0;
+  margin: 0 0 5px;
+  padding: 10px;
+  box-sizing: border-box;
+  font-size: 12px;
+}
+
+.search button {
+  outline: 0;
+  background: #f2f2f2; /*color of button*/
+  border: 0;
+  text-indent: -1000px;
+  border-radius: 10px;
+  margin-left: 15px;
+  background-image: url("http://www.dliflc.edu/wp-content/themes/DLIFLC/images/icon-find.png");
+  background-repeat: no-repeat;
+  background-position: center;
+  height: 36px;
+  font-size: 11px;
+  -webkit-transition: all 0.3 ease;
+  transition: all 0.3 ease;
+  cursor: pointer;
 }

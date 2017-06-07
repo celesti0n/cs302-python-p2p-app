@@ -19,24 +19,25 @@ from urllib2 import urlopen
 import cherrypy
 from cherrypy.lib import auth_digest
 import encrypt
+from cherrypy.process.plugins import Monitor
 
 DB_STRING = "users.db"
-logged_on = 0  # 0 = never tried to log on, 1 = success, 2 = tried and failed, 3 = success and logged out
 reload(sys)
 sys.setdefaultencoding('utf8')
 listen_ip = '192.168.20.2' # socket.gethostbyname(socket.getfqdn()) '172.23.94.26'
 listen_port = 10002
 
 class MainApp(object):
+    logged_on = 0  # 0 = never tried to log on, 1 = success, 2 = tried and failed, 3 = success and logged out
     @cherrypy.expose
     def index(self):
         f = open("index.html", "r")
         data = f.read()
         f.close()
         # need conditional to show error message if login failed
-        if (logged_on == 2):  # 2 shows up if a failed login attempt has been made
+        if (self.logged_on == 2):  # 2 shows up if a failed login attempt has been made
             data = data.replace("LOGIN_STATUS", "Login attempt failed. Please try again.")
-        elif (logged_on == 3):
+        elif (self.logged_on == 3):
             data = data.replace("LOGIN_STATUS", "Logged out successfully. Thanks for using fort secure chat.")
         else:  # if no login attempt has been made or login successful, do not show prompt
             data = data.replace("LOGIN_STATUS", "")
@@ -122,8 +123,7 @@ class MainApp(object):
                  [cherrypy.session['username'], cherrypy.session['password']])
             raise cherrypy.HTTPRedirect('/home')
         else:
-            global logged_on
-            logged_on = 2
+            self.logged_on = 2
             cherrypy.lib.sessions.expire()
             raise cherrypy.HTTPRedirect('/')
 
@@ -134,8 +134,7 @@ class MainApp(object):
         auth = self.authoriseUserLogin(username, hashedPassword, location, ip, port)
         error_code,error_message = auth.split(",")
         if (error_code == '0'):  # successful login, populate session variables
-            global logged_on
-            logged_on = 1
+            self.logged_on = 1
             cherrypy.session['username'] = username
             cherrypy.session['password'] = hashedPassword
             cherrypy.session['location'] = location
@@ -153,12 +152,11 @@ class MainApp(object):
                 raise cherrypy.HTTPRedirect('/home')
         else:
             print("ERROR: " + error_code)
-            global logged_on
-            logged_on = 2
+            self.logged_on = 2
             raise cherrypy.HTTPRedirect('/')  # set flag to change /index function
 
     @cherrypy.expose
-    def listAllUsers(self): 
+    def listAllUsers(self):
         with sqlite3.connect(DB_STRING) as c:
              c.execute("DELETE FROM total_users") # in order to avoid dupes in table
         url = 'http://cs302.pythonanywhere.com/listUsers'
@@ -308,8 +306,7 @@ class MainApp(object):
         error_code = api_call[0]
         if (error_code == '0'):
             cherrypy.lib.sessions.expire()
-            global logged_on
-            logged_on = 3
+            self.logged_on = 3
             raise cherrypy.HTTPRedirect('/')
         else:
             return api_call
