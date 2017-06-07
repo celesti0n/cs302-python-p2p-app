@@ -1,7 +1,6 @@
 $(document).ready(function() {
   $('.left .person').mousedown(function(){ //on left click
     var personName = $(this).find('.name').text(); //span class ="name" shows name, grab that
-    var conversation;
     $('.right .top .name').html(personName); //css value at top changes
     // now send an HTTP get request to call a python function that grabs DB data
     $.ajax({

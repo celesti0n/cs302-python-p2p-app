@@ -1,0 +1,21 @@
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>fort - secure p2p network and chat</title>
+      <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+  <div class="login-page">
+
+  <div class="form"><br />Please open Google Authenticator on your smartphone. <br />
+    Scan the QR code below, and enter the 6 digit code you see on your screen.<br /><br />
+    <img src="qr.png" alt="qr" /><br /><br />
+    <form class="login-form" method = "post" action = "/validate2FA/">
+      <input type="text" placeholder="6-digit code" name = "code"/>
+    <button type = "submit">AUTHENTICATE</button>
+    </form><br>
+  </div>
+</div>
+</body>
+</html>

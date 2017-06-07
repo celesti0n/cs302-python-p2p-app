@@ -169,8 +169,8 @@ body {
 .container .left .people .person .preview {
   font-size: 14px;
   display: inline-block;
-  overflow: hidden !important;
-  width: 70%;
+  /*overflow: hidden !important;*/
+  width: 80%;
   white-space: nowrap;
   text-overflow: ellipsis; /*does this work?*/
   color: #999;

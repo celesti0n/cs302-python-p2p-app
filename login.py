@@ -13,7 +13,6 @@ import sys
 import datetime
 import atexit
 import base64
-
 from json import load
 from urllib2 import urlopen
 
@@ -36,7 +35,7 @@ class MainApp(object):
         f.close()
         # need conditional to show error message if login failed
         if (logged_on == 2):  # 2 shows up if a failed login attempt has been made
-            data = data.replace("LOGIN_STATUS", "Sorry, something went wrong. Please try again.")
+            data = data.replace("LOGIN_STATUS", "Login attempt failed. Please try again.")
         elif (logged_on == 3):
             data = data.replace("LOGIN_STATUS", "Logged out successfully. Thanks for using fort secure chat.")
         else:  # if no login attempt has been made or login successful, do not show prompt
@@ -54,7 +53,7 @@ class MainApp(object):
             return "You are not logged in. Click " + "<a href='/'>here</a> to login"
         data = data.replace("USERS_ONLINE", self.getList())
         data = data.replace("LIST_OF_ONLINE_USERS", self.showList())
-        data = data.replace("LIST_OF_TOTAL_USERS", self.listAllUsers())
+        data = data.replace("LIST_OF_TOTAL_USERS", self.listAllUsers('chat'))
         data = data.replace("RECEIVED_MESSAGE_LIST", self.displayReceivedMessage())
         data = data.replace("SENT_MESSAGE_LIST", self.displaySentMessage())
         data = data.replace("PLACEHOLDER", self.getChatConvo())
@@ -90,6 +89,45 @@ class MainApp(object):
         return data
 
     @cherrypy.expose
+    def viewProfiles(self):
+        f = open("viewProfiles.html", "r")
+        data = f.read()
+        f.close()
+        try:
+            data = data.replace("USER_NAME", cherrypy.session['username'])
+        except:
+            return "You are not logged in. Click " + "<a href='/'>here</a> to login"
+        data = data.replace("LIST_OF_TOTAL_USERS", self.listAllUsers('profiles'))
+        data = data.replace("PLACEHOLDER", self.displayProfile())
+        return data
+
+    @cherrypy.expose
+    def twoFA(self):
+        f = open("twoFA.html", "r")
+        data = f.read()
+        f.close()
+        data = data.replace("GAUTH_KEY",encrypt.secret)
+        return data
+
+    @cherrypy.expose
+    def validate2FA(self, code):
+        # edge case if MSB of code is 0, get_totp_token would return a 5 digit no.
+        if code[0] == '0':
+            code = code[1:] # new code doesnt include MSB
+
+        if (int(code) == encrypt.get_totp_token(encrypt.secret)):
+            print("twoFA successfully authenticated")
+            with sqlite3.connect(DB_STRING) as c:
+                 c.execute("INSERT INTO user_credentials(username, password) VALUES (?,?)",
+                 [cherrypy.session['username'], cherrypy.session['password']])
+            raise cherrypy.HTTPRedirect('/home')
+        else:
+            global logged_on
+            logged_on = 2
+            cherrypy.lib.sessions.expire()
+            raise cherrypy.HTTPRedirect('/')
+
+    @cherrypy.expose
     def report(self, username, password, location='2', ip='180.148.96.53', port=listen_port): # change ip = back to listen_ip
         # print(ip)
         hashedPassword = encrypt.hash(password)  # call hash function for SHA256 encryption
@@ -100,16 +138,19 @@ class MainApp(object):
             logged_on = 1
             cherrypy.session['username'] = username
             cherrypy.session['password'] = hashedPassword
-            # also store username and password in user_credentials table; forceful logoff (on application exit/crash) uses this
-            with sqlite3.connect(DB_STRING) as c:
-                 c.execute("DELETE FROM user_credentials") # clear out db first - this WILL break things if you want multi-user support (A grade)
-                 c.execute("INSERT INTO user_credentials(username, password) VALUES (?,?)",
-                 [username, hashedPassword])
             cherrypy.session['location'] = location
             cherrypy.session['ip'] = ip
             cherrypy.session['port'] = port
             cherrypy.session['enc'] = 0  # change these later if deciding to use enc/json/etc.
-            raise cherrypy.HTTPRedirect('/home')
+            c = sqlite3.connect(DB_STRING)
+            cur = c.cursor()
+            cur.execute("SELECT username FROM user_credentials WHERE username=?", [username])
+            credentials = cur.fetchone()
+            if not credentials: # couldn't find, thus user has never logged on before and needs 2FA QR
+                #store username and password in user_credentials table; logoffForced (on application exit/crash) uses this
+                raise cherrypy.HTTPRedirect('/twoFA')
+            else: # could find user, go straight to /home without needing 2FA
+                raise cherrypy.HTTPRedirect('/home')
         else:
             print("ERROR: " + error_code)
             global logged_on
@@ -117,7 +158,7 @@ class MainApp(object):
             raise cherrypy.HTTPRedirect('/')  # set flag to change /index function
 
     @cherrypy.expose
-    def listAllUsers(self):
+    def listAllUsers(self, string): #if string == 'chat', small text = status, if string == 'profiles', make small text = description.
         with sqlite3.connect(DB_STRING) as c:
              c.execute("DELETE FROM total_users") # in order to avoid dupes in table
         url = 'http://cs302.pythonanywhere.com/listUsers'
@@ -125,16 +166,49 @@ class MainApp(object):
         total_users_list = api_call.split(",")
         total_users = len(total_users_list)
         total_users_string = ''
-        for i in range(0, total_users):
-            if total_users_list[i] != cherrypy.session['username']: # don't add the current user to list of possible contacts
-                with sqlite3.connect(DB_STRING) as c:
-                     c.execute("INSERT INTO total_users(username) VALUES (?)",
-                     [total_users_list[i]])
-                total_users_string += '<li class="person"' + str(i+1) + '">' + \
-                '<img src="http://imgur.com/oymng0G.jpg" alt="" />' + '<span class="name">' + \
-                str(total_users_list[i]) + '</span>' + \
-                '<span class="preview">' + self.checkLastOnline(total_users_list[i]) + '</span></li>'
+        if string == 'chat':
+            for i in range(0, total_users):
+                if total_users_list[i] != cherrypy.session['username']: # don't add the current user to list of possible contacts
+                    with sqlite3.connect(DB_STRING) as c:
+                         c.execute("INSERT INTO total_users(username) VALUES (?)",
+                         [total_users_list[i]])
+                    total_users_string += '<li class="person"' + str(i+1) + '">' + \
+                    '<img src="' + self.getProfilePic(total_users_list[i]) + '"/>' + '<span class="name">' + \
+                    str(total_users_list[i]) + '</span>' + \
+                    '<span class="preview">' + self.checkLastOnline(total_users_list[i]) + '</span></li>'
+        elif string == 'profiles':
+            for i in range(0, total_users):
+                if total_users_list[i] != cherrypy.session['username']: # don't add the current user to list of possible contacts
+                    with sqlite3.connect(DB_STRING) as c:
+                         c.execute("INSERT INTO total_users(username) VALUES (?)",
+                         [total_users_list[i]])
+                    total_users_string += '<li class="person"' + str(i+1) + '">' + \
+                    '<img src="' + self.getProfilePic(total_users_list[i]) + '"/>' + '<span class="name">' + \
+                    str(total_users_list[i]) + '</span>' + \
+                    '<span class="preview">' + self.getDescription(total_users_list[i]) + '</span></li>'
         return total_users_string
+
+    def getProfilePic(self, user):
+        c = sqlite3.connect(DB_STRING)
+        cur = c.cursor()
+        cur.execute("SELECT picture FROM profiles WHERE profile_username=?",
+                    [user])
+        pic = cur.fetchone()
+        if not pic: #no pic found
+            return 'http://imgur.com/oymng0G.jpg' # return default pic
+        else:
+            return ''.join(pic) # tuple to string
+
+    def getDescription(self, user):
+        c = sqlite3.connect(DB_STRING)
+        cur = c.cursor()
+        cur.execute("SELECT description FROM profiles WHERE profile_username=?",
+                    [user])
+        desc = cur.fetchone()
+        if not desc: #no desc found
+            return 'No description' # return default pic
+        else:
+            return ''.join(desc) # tuple to string
 
     def checkLastOnline(self, user):
         c = sqlite3.connect(DB_STRING)
@@ -159,7 +233,6 @@ class MainApp(object):
             conversation += 'You can also view user profiles and send/receive files, just use the top navigation bar.' + '</div>'
             conversation += '<div class = "bubble you">'
             conversation += 'Remember to wait 5-10 seconds for your message to appear after sending.' + '</div>'
-
             return str(conversation)
         else:
             # get conversation between somebody and the logged in user.
@@ -175,6 +248,32 @@ class MainApp(object):
                     conversation += row[2] + '</div>'
             return str(conversation)
 
+    @cherrypy.expose
+    def getChatConvo(self, username='entry'):
+        conversation = ''
+        if (username == 'entry'): # on first start of app, hardcode conversation
+            conversation += '<div class="bubble you">'
+            conversation += 'Welcome to fort secure chat!' + '</div>'
+            conversation += '<div class="bubble you">'
+            conversation += 'To start, choose a user to chat with on the left. Use the enter key to send.' + '</div>'
+            conversation += '<div class = "bubble you">'
+            conversation += 'You can also view user profiles and send/receive files, just use the top navigation bar.' + '</div>'
+            conversation += '<div class = "bubble you">'
+            conversation += 'Remember to wait 5-10 seconds for your message to appear after sending.' + '</div>'
+            return str(conversation)
+        else:
+            # get conversation between somebody and the logged in user.
+            c = sqlite3.connect(DB_STRING)
+            cur = c.cursor()
+            cur.execute("SELECT sender, destination, msg FROM msg ORDER BY stamp ASC")
+            for row in cur:
+                if (username == row[0]): # if the message belongs to the sender, call the div that styles left bubble
+                    conversation += '<div class="bubble you">'
+                    conversation += row[2] + '</div>'
+                elif (username == row[1]): # if the message belongs to me, call right bubble
+                    conversation += '<div class="bubble me">'
+                    conversation += row[2] + '</div>'
+            return str(conversation)
     @cherrypy.expose
     def getList(self):
         with sqlite3.connect(DB_STRING) as c:
@@ -245,7 +344,7 @@ class MainApp(object):
 
     @cherrypy.expose
     def listAPI(self):
-        return '/ping /listAPI /receiveMessage [sender] [destination] [message] [stamp] /getProfile [profile_username]'+ \
+        return '/ping /listAPI /receiveMessage [sender] [destination] [message] [stamp] /getProfile [profile_username] [sender]'+ \
         ' /receiveFile [sender] [destination] [file] [filename] [content_type] [stamp] /getStatus [profile_username]'
 
     @cherrypy.expose
@@ -294,7 +393,7 @@ class MainApp(object):
             return "something happened"
 
     @cherrypy.expose
-    @cherrypy.tools.json_in() # profile_username input is stored in cherrypy.request.json['profile_username']
+    @cherrypy.tools.json_in() # profile_username and sender input is stored in cherrypy.request.json
     @cherrypy.tools.json_out(content_type='application/json') # allows the output to be of type application/json instead of text/html
     def getProfile(self): # this function is called by OTHER people to grab my data. use displayProfile to see my own, grabProfile to get others
         try:
@@ -310,54 +409,69 @@ class MainApp(object):
             return postdata #TODO: need more testing, seems to be 'encoding twice' or have (\") instead of ("), according to Insomnia
         except:
             print("Somebody TRIED to grab your profile details.")
-            return "You aren't encoding your POST request to me with JSON, git gud"
+            return "4: Database Error"
 
     @cherrypy.expose
-    def grabProfile(self, profile_username): #this function is called by me to grab other people's JSON encoded data and decode it to string.
+    def grabProfile(self, profile_username, sender=''): #this function is called by me to grab other people's JSON encoded data and decode it to string.
         c = sqlite3.connect(DB_STRING)
         cur = c.cursor()
         cur.execute("SELECT ip, port FROM user_string WHERE username=?",
                     [profile_username])
-        values_tuple = cur.fetchall()
-        ip = values_tuple[0][0]
-        port = values_tuple[0][1]
-        params = self.jsonEncodeUsername(profile_username)
-        req = urllib2.Request("http://" + ip + ":" + port + "/getProfile",
-                             params, {'Content-Type': 'application/json'})
-        response = urllib2.urlopen(req).read()
-        try: # if response is not valid JSON, json.loads should throw a ValueError
-            print "Profile details grabbed: " + profile_username
-            with sqlite3.connect(DB_STRING) as c:
-                 # decode response
-                 response_str = json.loads(response)
-                 c.execute("INSERT INTO profiles(profile_username, fullname, position, description, location, picture) VALUES (?,?,?,?,?,?)",
-                 (profile_username, response_str["fullname"], response_str["position"], response_str["description"],
-                 response_str["location"], response_str["picture"]))
-            raise cherrypy.HTTPRedirect("/home")
-        except ValueError:
-            print "An error occurred. The target user is not returning a JSON encoding their profile info."
-            return response
+        values = cur.fetchone()
+        if not values:
+            return '3: Client Currently Unavailable'
+        else:
+            ip = values[0]
+            port = values[1]
+            profile_dict = {"profile_username": profile_username, "sender": cherrypy.session['username']}
+            params = json.dumps(profile_dict)
+            req = urllib2.Request("http://" + ip + ":" + port + "/getProfile",
+                                 params, {'Content-Type': 'application/json'})
+            response = urllib2.urlopen(req).read()
+            try: # if response is not valid JSON, json.loads should throw a ValueError
+                print "Profile details grabbed: " + profile_username
+                with sqlite3.connect(DB_STRING) as c:
+                     # decode response
+                     response_str = json.loads(response)
+                     c.execute("INSERT INTO profiles(profile_username, fullname, position, description, location, picture) VALUES (?,?,?,?,?,?)",
+                     (profile_username, response_str["fullname"], response_str["position"], response_str["description"],
+                     response_str["location"], response_str["picture"]))
+                return self.displayProfile(profile_username)
+            except ValueError:
+                print "An error occurred. The target user is not returning a JSON encoding their profile info."
+                return response
 
     @cherrypy.expose
-    def displayProfile(self):
-        try: # assume the values we want already exist, and grab those
+    def displayProfile(self, user='entry'):
+        if (user == 'entry'):
             c = sqlite3.connect(DB_STRING)
             cur = c.cursor()
             cur.execute("SELECT fullname, position, description, location, picture FROM profiles WHERE profile_username=?",
                         [cherrypy.session['username']])
-            profile_info = cur.fetchall()
-            fullname = profile_info[0][0]
-            position = profile_info[0][1]
-            description = profile_info[0][2]
-            location = profile_info[0][3]
-            picture = profile_info[0][4]
-            return 'Profile Picture: <br />' +'<img src="' + picture + '" height="64" width="64">' + '<br />' + "Full Name: " + str(fullname) + '<br />' + \
-            "Position: " + str(position) + '<br />' + "Description: " + str(description) + '<br />' + "Location: " + str(location)
-        except: # if currently logged on user has never used this client, insert placeholders into the db and call function again
-            with sqlite3.connect(DB_STRING) as c:
-                 c.execute("INSERT INTO profiles(profile_username, fullname, position, description, location, picture) VALUES (?,?,?,?,?,?)",
-                 [cherrypy.session['username'], "Welcome, new user. Edit these fields!", "None", "None", "None", "No picture supplied"])
-            self.displayProfile()
+            profile_info = cur.fetchone()
+            fullname = profile_info[0]
+            position = profile_info[1]
+            description = profile_info[2]
+            location = profile_info[3]
+            picture = profile_info[4]
+            return '<center>Profile Picture: <br />' +'<img src="' + picture + '" height="128" width="128">' + '<br />' + "<i>Full Name: " + str(fullname) + '</i><br />' + \
+            "Position: " + str(position) + '<br />' + "Description: " + str(description) + '<br />' + "Location: " + str(location) + '</center>'
+        else:
+            try:
+                c = sqlite3.connect(DB_STRING)
+                cur = c.cursor()
+                cur.execute("SELECT fullname, position, description, location, picture FROM profiles WHERE profile_username=?",
+                            [user])
+                profile_info = cur.fetchone()
+                fullname = profile_info[0]
+                position = profile_info[1]
+                description = profile_info[2]
+                location = profile_info[3]
+                picture = profile_info[4]
+                return 'Profile Picture: <br />' +'<img src="' + picture + '" height="64" width="64">' + '<br />' + "Full Name: " + str(fullname) + '<br />' + \
+                "Position: " + str(position) + '<br />' + "Description: " + str(description) + '<br />' + "Location: " + str(location)
+            except:
+                return 'This profile has not published any information yet.'
 
     @cherrypy.expose
     def updateProfile(self, fullname, position, description, location, picture):
@@ -391,9 +505,9 @@ class MainApp(object):
             c = sqlite3.connect(DB_STRING)
             cur = c.cursor()
             cur.execute("SELECT ip, port FROM user_string WHERE username=?",[destination])
-            values_tuple = cur.fetchall()
-            ip = values_tuple[0][0]
-            port = values_tuple[0][1]
+            values_tuple = cur.fetchone()
+            ip = values_tuple[0]
+            port = values_tuple[1]
         except:
             return "3: Client Currently Unavailable"
         # check if their listAPI contains receiveFile, or the function won't work
@@ -475,8 +589,8 @@ class MainApp(object):
         c = sqlite3.connect(DB_STRING)
         cur = c.cursor()
         cur.execute("SELECT ip, port FROM user_string WHERE username=?",[username])
-        values_tuple = cur.fetchall()
-        api_call = 'http://' + values_tuple[0][0] + ':' + values_tuple[0][1] + '/listAPI'
+        values_tuple = cur.fetchone()
+        api_call = 'http://' + values_tuple[0] + ':' + values_tuple[1] + '/listAPI'
         response = urllib2.urlopen(api_call).read()
         if response.find(string) != -1:  # successful in finding string
             return True
@@ -498,11 +612,6 @@ class MainApp(object):
 
     def jsonEncodeMessage(self, sender, message, destination, stamp):
         output_dict = { "sender": sender, "message": message, "destination": destination, "stamp": stamp}
-        data = json.dumps(output_dict)
-        return data
-
-    def jsonEncodeUsername(self, profile_username):
-        output_dict = {"profile_username": profile_username}
         data = json.dumps(output_dict)
         return data
 
