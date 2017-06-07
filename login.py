@@ -53,7 +53,7 @@ class MainApp(object):
             return "You are not logged in. Click " + "<a href='/'>here</a> to login"
         data = data.replace("USERS_ONLINE", self.getList())
         data = data.replace("LIST_OF_ONLINE_USERS", self.showList())
-        data = data.replace("LIST_OF_TOTAL_USERS", self.listAllUsers('chat'))
+        data = data.replace("LIST_OF_TOTAL_USERS", self.listAllUsers())
         data = data.replace("RECEIVED_MESSAGE_LIST", self.displayReceivedMessage())
         data = data.replace("SENT_MESSAGE_LIST", self.displaySentMessage())
         data = data.replace("PLACEHOLDER", self.getChatConvo())
@@ -97,7 +97,7 @@ class MainApp(object):
             data = data.replace("USER_NAME", cherrypy.session['username'])
         except:
             return "You are not logged in. Click " + "<a href='/'>here</a> to login"
-        data = data.replace("LIST_OF_TOTAL_USERS", self.listAllUsers('profiles'))
+        data = data.replace("LIST_OF_TOTAL_USERS", self.listAllUsers())
         data = data.replace("PLACEHOLDER", self.displayProfile())
         return data
 
@@ -158,7 +158,7 @@ class MainApp(object):
             raise cherrypy.HTTPRedirect('/')  # set flag to change /index function
 
     @cherrypy.expose
-    def listAllUsers(self, string): #if string == 'chat', small text = status, if string == 'profiles', make small text = description.
+    def listAllUsers(self): 
         with sqlite3.connect(DB_STRING) as c:
              c.execute("DELETE FROM total_users") # in order to avoid dupes in table
         url = 'http://cs302.pythonanywhere.com/listUsers'
@@ -166,26 +166,15 @@ class MainApp(object):
         total_users_list = api_call.split(",")
         total_users = len(total_users_list)
         total_users_string = ''
-        if string == 'chat':
-            for i in range(0, total_users):
-                if total_users_list[i] != cherrypy.session['username']: # don't add the current user to list of possible contacts
-                    with sqlite3.connect(DB_STRING) as c:
-                         c.execute("INSERT INTO total_users(username) VALUES (?)",
-                         [total_users_list[i]])
-                    total_users_string += '<li class="person"' + str(i+1) + '">' + \
-                    '<img src="' + self.getProfilePic(total_users_list[i]) + '"/>' + '<span class="name">' + \
-                    str(total_users_list[i]) + '</span>' + \
-                    '<span class="preview">' + self.checkLastOnline(total_users_list[i]) + '</span></li>'
-        elif string == 'profiles':
-            for i in range(0, total_users):
-                if total_users_list[i] != cherrypy.session['username']: # don't add the current user to list of possible contacts
-                    with sqlite3.connect(DB_STRING) as c:
-                         c.execute("INSERT INTO total_users(username) VALUES (?)",
-                         [total_users_list[i]])
-                    total_users_string += '<li class="person"' + str(i+1) + '">' + \
-                    '<img src="' + self.getProfilePic(total_users_list[i]) + '"/>' + '<span class="name">' + \
-                    str(total_users_list[i]) + '</span>' + \
-                    '<span class="preview">' + self.getDescription(total_users_list[i]) + '</span></li>'
+        for i in range(0, total_users):
+            if total_users_list[i] != cherrypy.session['username']: # don't add the current user to list of possible contacts
+                with sqlite3.connect(DB_STRING) as c:
+                     c.execute("INSERT INTO total_users(username) VALUES (?)",
+                     [total_users_list[i]])
+                total_users_string += '<li class="person"' + str(i+1) + '">' + \
+                '<img src="' + self.getProfilePic(total_users_list[i]) + '"/>' + '<span class="name">' + \
+                str(total_users_list[i]) + '</span>' + \
+                '<span class="preview">' + self.checkOnline(total_users_list[i]) + '</span></li>'
         return total_users_string
 
     def getProfilePic(self, user):
@@ -210,7 +199,7 @@ class MainApp(object):
         else:
             return ''.join(desc) # tuple to string
 
-    def checkLastOnline(self, user):
+    def checkOnline(self, user):
         c = sqlite3.connect(DB_STRING)
         cur = c.cursor()
         cur.execute("SELECT lastlogin FROM user_string WHERE username=?", [user])

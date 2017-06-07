@@ -9,11 +9,12 @@ $(document).ready(function() {
       url: './grabProfile?profile_username='+personName+'&sender='+username,
       success: function(data){
         console.log("success getting profile");
+        $(".chat").html(data);
       },
-      timeout: 5000,
+      timeout: 2000,
       error: function(xmlhttprequest, textstatus, message) {
         if(textstatus==="timeout") {
-          alert("5: Timeout Error");
+          alert("5: Timeout Error, user probably not online");
         }
       }
       });
