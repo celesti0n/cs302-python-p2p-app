@@ -13,6 +13,7 @@ import sys
 import datetime
 import atexit
 import base64
+import markdown
 
 from json import load
 from urllib2 import urlopen
@@ -363,13 +364,20 @@ class MainApp(object):
     @cherrypy.tools.json_in() # read documentation, all json input parameters stored in cherrypy.request.json
     def receiveMessage(self): # opt args: markdown, encoding, ecnryption, hashing, hash
         # refactor this to take in a single argument which is of type JSON, use  @cherrypy.json_in() decorator
-        # if cherrypy.request.json['destination'] ==  'mwon724': # the message was meant for this user
-        with sqlite3.connect(DB_STRING) as c:
-             c.execute("INSERT INTO msg(sender, destination, msg, stamp) VALUES (?,?,?,?)",
-             [cherrypy.request.json['sender'], cherrypy.request.json['destination'],
-              cherrypy.request.json['message'], cherrypy.request.json['stamp']])
-        print "Message received from " + cherrypy.request.json['sender']
-        return '0'
+        try: # try to receive a message with additional markdown encoding argument
+            with sqlite3.connect(DB_STRING) as c:
+                 c.execute("INSERT INTO msg(sender, destination, msg, stamp) VALUES (?,?,?,?)",
+                 [cherrypy.request.json['sender'], cherrypy.request.json['destination'],
+                  cherrypy.request.json['message'], cherrypy.request.json['stamp'], cherrypy.request.json['markdown']])
+            print "Message received from " + cherrypy.request.json['sender']
+            return '0'
+        except: # if it doesn't work, just store without the markdown encoding argument
+            with sqlite3.connect(DB_STRING) as c:
+                 c.execute("INSERT INTO msg(sender, destination, msg, stamp) VALUES (?,?,?,?)",
+                 [cherrypy.request.json['sender'], cherrypy.request.json['destination'],
+                  cherrypy.request.json['message'], cherrypy.request.json['stamp']])
+            print "Message received from " + cherrypy.request.json['sender']
+            return '0'
         # else: # message was meant for somebody else
         #     print("Passing this message on: " + cherrypy.request.json['message'] + ". It was meant for " + \
         #     cherrypy.request.json['destination'])
@@ -381,20 +389,28 @@ class MainApp(object):
         cur = c.cursor()
         cur.execute("SELECT ip, port FROM user_string WHERE username=?",[destination])
         values_tuple = cur.fetchall()
-        print(values_tuple)
+        ip = values_tuple[0][0]
+        port = values_tuple[0][1]
         if not values_tuple: # if either ip and port is empty
             return "3: Client Currently Unavailable"
         else:
-            ip = values_tuple[0][0]
-            port = values_tuple[0][1]
-            # message data must be encoded into JSON
-            postdata = self.jsonEncodeMessage(cherrypy.session.get('username'), message, destination, int(time.time()))
-            req = urllib2.Request("http://" + ip + ":" + port + "/receiveMessage",
-                                 postdata, {'Content-Type': 'application/json'})
-            try:
-                response = urllib2.urlopen(req).read()
-            except:
-                return "5: Timeout Error"
+            try:  #try to send them a markdown formatted message
+                # message data must be encoded into JSON, message is converted to markdown
+                postdata = self.jsonEncodeMessage(cherrypy.session.get('username'), markdown.markdown(message), destination, int(time.time(),1))
+                req = urllib2.Request("http://" + ip + ":" + port + "/receiveMessage",
+                                     postdata, {'Content-Type': 'application/json'})
+                try:
+                    response = urllib2.urlopen(req).read()
+                except:
+                    return "5: Timeout Error"
+            except: # if it doesn't work, try to send them a message without markdown (in jsonEncodeMessage, markdown is 0 by default)
+                postdata = self.jsonEncodeMessage(cherrypy.session.get('username'), message, destination, int(time.time()))
+                req = urllib2.Request("http://" + ip + ":" + port + "/receiveMessage",
+                                     postdata, {'Content-Type': 'application/json'})
+                try:
+                    response = urllib2.urlopen(req).read()
+                except:
+                    return "5: Timeout Error"
         if (response.find('0') != -1): # successful
             print "Message sent to client: " + destination
             with sqlite3.connect(DB_STRING) as c:
@@ -666,8 +682,8 @@ class MainApp(object):
         return messages
 
 
-    def jsonEncodeMessage(self, sender, message, destination, stamp):
-        output_dict = { "sender": sender, "message": message, "destination": destination, "stamp": stamp}
+    def jsonEncodeMessage(self, sender, message, destination, stamp, markdown=0):
+        output_dict = { "sender": sender, "message": message, "destination": destination, "stamp": stamp, "markdown": markdown}
         data = json.dumps(output_dict)
         return data
 
