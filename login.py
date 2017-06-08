@@ -131,8 +131,9 @@ class MainApp(object):
         if (int(code) == encrypt.get_totp_token(encrypt.secret)):
             print("twoFA successfully authenticated")
             with sqlite3.connect(DB_STRING) as c:
-                 c.execute("INSERT INTO user_credentials(username, password) VALUES (?,?)",
-                 [cherrypy.session['username'], cherrypy.session['password']])
+                 c.execute("INSERT INTO user_credentials(username, password, location, ip, port) VALUES (?,?,?,?,?)",
+                 [cherrypy.session['username'], cherrypy.session['password'], cherrypy.session['location'],
+                 cherrypy.session['ip'],cherrypy.session['port']])
             raise cherrypy.HTTPRedirect('/home')
         else:
             self.logged_on = 2
@@ -152,13 +153,13 @@ class MainApp(object):
             cherrypy.session['location'] = location
             cherrypy.session['ip'] = ip
             cherrypy.session['port'] = port
-            cherrypy.session['enc'] = 0  # change these later if deciding to use enc/json/etc.
+            t = Monitor(cherrypy.engine, MainApp().reportThreaded, frequency=30).start() # start threading function, 30 seconds
             c = sqlite3.connect(DB_STRING)
             cur = c.cursor()
             cur.execute("SELECT username FROM user_credentials WHERE username=?", [username])
             credentials = cur.fetchone()
             if not credentials: # couldn't find, thus user has never logged on before and needs 2FA QR
-                #store username and password in user_credentials table; logoffForced (on application exit/crash) uses this
+                #store username and password in user_credentials table; logoffForced (on application exit/crash), threaded /report and 2FA uses this
                 raise cherrypy.HTTPRedirect('/twoFA')
             else: # could find user, go straight to /home without needing 2FA
                 raise cherrypy.HTTPRedirect('/home')
@@ -166,6 +167,16 @@ class MainApp(object):
             print("ERROR: " + error_code)
             self.logged_on = 2
             raise cherrypy.HTTPRedirect('/')  # set flag to change /index function
+
+    def reportThreaded(self):
+        c = sqlite3.connect(DB_STRING)
+        cur = c.cursor()
+        cur.execute("SELECT username, password, location, ip, port FROM user_credentials")
+        credentials = cur.fetchone()
+        auth = self.authoriseUserLogin(credentials[0],credentials[1],credentials[2],credentials[3],credentials[4])
+        print("/report called!")
+        print(auth)
+        return auth
 
     @cherrypy.expose
     def listAllUsers(self):
@@ -194,7 +205,7 @@ class MainApp(object):
                     [user])
         pic = cur.fetchone()
         if not pic: #no pic found
-            return 'http://imgur.com/oymng0G.jpg' # return default pic
+            return 'http://imgur.com/oymng0G.jpg' # return default pic, fort logo
         else:
             return ''.join(pic) # tuple to string
 
@@ -277,14 +288,13 @@ class MainApp(object):
     def getList(self):
         with sqlite3.connect(DB_STRING) as c:
              c.execute("DELETE FROM user_string") # in order to avoid dupes in table
-        params = {'username':cherrypy.session['username'], 'password':cherrypy.session['password'],
-                  'enc':cherrypy.session['enc']}
+        params = {'username':cherrypy.session['username'], 'password':cherrypy.session['password']}
         full_url = 'http://cs302.pythonanywhere.com/getList?' + urllib.urlencode(params)
         api_call = urllib2.urlopen(full_url).read()
         error_code = api_call[0] # error code is always first character in string
         api_format = api_call.replace("0, Online user list returned", "") # remove irrelevant text
         users_online = api_format.count('\n') - 1 # db must insert users_online amount of times
-        if (error_code == '0'): # later add different logic if enc = 1
+        if (error_code == '0'):
             for i in range(0, users_online):
                 data = api_format.split() # split each user into different list element
                 try: # if user has only provided the required 5 params
@@ -586,8 +596,8 @@ class MainApp(object):
 
     @cherrypy.expose
     def displayFileForm(self):
-        return """
-            <div class="form">
+        return """<br /><br /><br /><br />
+            <br /><br /><br /><br /><div class="form">
             <form class="login-form" method = "post" action = "/sendFile/" enctype="multipart/form-data">
               <input type="text" placeholder="recipient of file" name = "destination"/>
               <input type="file" name = "file"/>
