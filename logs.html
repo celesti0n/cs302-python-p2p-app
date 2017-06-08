@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>fort - secure p2p network and chat</title>
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/meyer-reset/2.0/reset.min.css">
+      <link rel="stylesheet" href="/static/css/style.css">
+</head>
+
+<body>
+  <div class="topnav">
+  <a href="./home">fort secure chat</a>
+  <a href="./viewProfiles">view profiles</a>
+  <a href="./files">files</a>
+  <a href="./logs">logs</a>
+  <a href="/logoff/">log off USER_NAME</a></ul>
+</div>
+<!--START OF MSGING WINDOW-->
+  <div class="wrapper">
+    <div class="container">
+        <div class="left">
+            <div class="top">
+              <form class="search">
+              <input type="text" placeholder = "search messages" name = "msg_phrase"/>
+              <button type="button" class="write-link send">search</a></form>
+            </div>
+            <ul class="people">
+                <li class="person"><img src="send.png" height="32" width = "32"/><span class="name">Sent messages</span>
+                <span class="preview"></span></li>
+                <li class="person"> <img src="receive.png" height="32" width = "32"/><span class="name">Received messages</span>
+                <span class="preview"></span></li>
+            </ul>
+        </div>
+        <div class="right">
+            <div class="top"><span><span class="name"></span></span></div>
+                  <div class="chat">
+                  <div class="bubble you">Welcome to the message logs section.</div>
+                  <div class="bubble you">Here you can view all the messages you have received and sent.</div>
+                  <div class="bubble you">You can use the search bar to search for specific messages - it is case insensitive.</div>
+                  </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+<script src="/static/js/logs.js"></script>
+
+</body>
+</html>

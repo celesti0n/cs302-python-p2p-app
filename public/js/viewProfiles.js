@@ -5,16 +5,18 @@ $(document).ready(function() {
     $('.right .top .name').html(personName); //css value at top changes
     // now send an HTTP get request to call a python function that grabs DB data
     $.ajax({
-      type: 'POST',
+      type: 'GET',
       url: './grabProfile?profile_username='+personName+'&sender='+username,
       success: function(data){
         console.log("success getting profile");
         $(".chat").html(data);
+        return false;
       },
       timeout: 2000,
       error: function(xmlhttprequest, textstatus, message) {
         if(textstatus==="timeout") {
           alert("5: Timeout Error, user probably not online");
+          return false;
         }
       }
       });
@@ -31,19 +33,22 @@ $(document).ready(function() {
     $('.right .top .name').html(text); //css value at top changes
     // now send an HTTP get request to call a python function that grabs DB data
     $.ajax({
-      type: 'POST',
+      type: 'GET',
       url: './grabProfile?profile_username='+text+'&sender='+username,
       success: function(data){
         console.log("success getting profile");
         $(".chat").html(data);
+        return false;
       },
       timeout: 2000,
       error: function(xmlhttprequest, textstatus, message) {
         if(textstatus==="timeout") {
           alert("5: Timeout Error, user probably not online");
+          return false;
         }
         else {
           alert("User not found!");
+          return false;
         }
       }
       });

@@ -13,6 +13,7 @@ import sys
 import datetime
 import atexit
 import base64
+
 from json import load
 from urllib2 import urlopen
 
@@ -24,7 +25,7 @@ from cherrypy.process.plugins import Monitor
 DB_STRING = "users.db"
 reload(sys)
 sys.setdefaultencoding('utf8')
-listen_ip = '192.168.20.2' # socket.gethostbyname(socket.getfqdn()) '172.23.94.26'
+listen_ip = '172.23.80.69' # socket.gethostbyname(socket.getfqdn())
 listen_port = 10002
 
 class MainApp(object):
@@ -70,7 +71,6 @@ class MainApp(object):
         except:
             return "You are not logged in. Click " + "<a href='/'>here</a> to login"
         data = data.replace("PROFILE_DETAILS", self.displayProfile())
-        data = data.replace("USER_FILES", self.displayFile())
         return data
 
     @cherrypy.expose
@@ -103,6 +103,17 @@ class MainApp(object):
         return data
 
     @cherrypy.expose
+    def logs(self):
+        f = open("logs.html", "r")
+        data = f.read()
+        try:
+            data = data.replace("USER_NAME", cherrypy.session['username'])
+        except:
+            return "You are not logged in. Click " + "<a href='/'>here</a> to login"
+        f.close()
+        return data
+
+    @cherrypy.expose
     def twoFA(self):
         f = open("twoFA.html", "r")
         data = f.read()
@@ -128,7 +139,7 @@ class MainApp(object):
             raise cherrypy.HTTPRedirect('/')
 
     @cherrypy.expose
-    def report(self, username, password, location='2', ip='180.148.96.53', port=listen_port): # change ip = back to listen_ip
+    def report(self, username, password, location='1', ip='202.36.244.13', port=listen_port): # change ip = back to listen_ip
         # print(ip)
         hashedPassword = encrypt.hash(password)  # call hash function for SHA256 encryption
         auth = self.authoriseUserLogin(username, hashedPassword, location, ip, port)
@@ -169,7 +180,7 @@ class MainApp(object):
                 with sqlite3.connect(DB_STRING) as c:
                      c.execute("INSERT INTO total_users(username) VALUES (?)",
                      [total_users_list[i]])
-                total_users_string += '<li class="person"' + str(i+1) + '">' + \
+                total_users_string += '<li class="person">' + \
                 '<img src="' + self.getProfilePic(total_users_list[i]) + '"/>' + '<span class="name">' + \
                 str(total_users_list[i]) + '</span>' + \
                 '<span class="preview">' + self.checkOnline(total_users_list[i]) + '</span></li>'
@@ -416,13 +427,21 @@ class MainApp(object):
             response = urllib2.urlopen(req).read()
             try: # if response is not valid JSON, json.loads should throw a ValueError
                 print "Profile details grabbed: " + profile_username
-                with sqlite3.connect(DB_STRING) as c:
-                     # decode response
-                     response_str = json.loads(response)
-                     c.execute("INSERT INTO profiles(profile_username, fullname, position, description, location, picture) VALUES (?,?,?,?,?,?)",
-                     (profile_username, response_str["fullname"], response_str["position"], response_str["description"],
-                     response_str["location"], response_str["picture"]))
-                return self.displayProfile(profile_username)
+                c = sqlite3.connect(DB_STRING)
+                cur = c.cursor()
+                cur.execute("SELECT profile_username FROM profiles WHERE profile_username=?",
+                            [profile_username])
+                values = cur.fetchone() # check if profile grab target is already in database
+                if not values: # if search is empty, insert their details into table
+                    with sqlite3.connect(DB_STRING) as c:
+                         # decode response
+                         response_str = json.loads(response)
+                         c.execute("INSERT INTO profiles(profile_username, fullname, position, description, location, picture) VALUES (?,?,?,?,?,?)",
+                         (profile_username, response_str["fullname"], response_str["position"], response_str["description"],
+                         response_str["location"], response_str["picture"]))
+                    return self.displayProfile(profile_username)
+                else: # they are already in the table, no need to duplicate insert
+                    return self.displayProfile(profile_username)
             except ValueError:
                 print "An error occurred. The target user is not returning a JSON encoding their profile info."
                 return response
@@ -440,8 +459,18 @@ class MainApp(object):
             description = profile_info[2]
             location = profile_info[3]
             picture = profile_info[4]
-            return '<center>Profile Picture: <br />' +'<img src="' + picture + '" height="128" width="128">' + '<br />' + "<i>Full Name: " + str(fullname) + '</i><br />' + \
-            "Position: " + str(position) + '<br />' + "Description: " + str(description) + '<br />' + "Location: " + str(location) + '</center>'
+            return '<br />' +'<img src="' + picture + '" height="128" width="128">' + '<br />' + "<b>Full Name:</b> " + str(fullname) + '<br />' + \
+            "<b>Position:</b> " + str(position) + '<br />' + "<b>Description: </b>" + str(description) + '<br />' + "<b>Location: </b>" + str(location) + \
+            """<br /><br /><br /><b>Edit your profile</b><br /><div class="profile-form">
+                <form class="update-profile" method = "put" action = "/updateProfile/">
+                  <input type="text" placeholder="full name" name = "fullname"/><br />
+                  <input type="text" placeholder="position" name = "position"/><br />
+                  <input type="text" placeholder="description" name = "description"/><br />
+                  <input type="text" placeholder="location" name = "location"/><br />
+                  <input type="text" placeholder="picture (URL link)" name = "picture"/><br />
+                <button type = "submit">update</button>
+                </form>"""
+
         else:
             try:
                 c = sqlite3.connect(DB_STRING)
@@ -468,7 +497,7 @@ class MainApp(object):
         (fullname, position, description, location, picture, cherrypy.session['username']))
         c.commit() # thank you stack overflow
         print(cherrypy.session['username'])
-        raise cherrypy.HTTPRedirect("/myProfile")
+        raise cherrypy.HTTPRedirect("/viewProfiles")
 
     @cherrypy.expose
     @cherrypy.tools.json_in() # takes in sender, destination, file, filename, content_type, stamp
@@ -564,8 +593,8 @@ class MainApp(object):
         msg_list = cur.fetchall()
         messages = ''
         for i in range(0, len(msg_list)):
-            messages += '<b>' + str(msg_list[i][0]) + '</b>' + " at " + self.epochFormat(msg_list[i][2]) + \
-            " (" + str(self.timeSinceMessage(msg_list[i][2])) + ")" + " messaged you: " + str(msg_list[i][1]) + "<br />"
+            messages += '<i><b>' + str(msg_list[i][0]) + '</b>' + " [" + self.epochFormat(msg_list[i][2]) + "]" + \
+            " (" + str(self.timeSinceMessage(msg_list[i][2])) + ")" + " messaged you: " + str(msg_list[i][1]) + "<br /></i>"
         return messages
 
     @cherrypy.expose
@@ -592,9 +621,26 @@ class MainApp(object):
         msg_list = cur.fetchall()
         messages = ''
         for i in range(0, len(msg_list)):
-            messages += 'You sent ' + '<b>' + str(msg_list[i][0]) + '</b>' + " at " + self.epochFormat(msg_list[i][2]) + \
-            " (" + str(self.timeSinceMessage(msg_list[i][2])) + ")" + " this: " + str(msg_list[i][1]) + "<br />"
+            messages += '<i><b>You sent ' + str(msg_list[i][0]) + ':</b>' + " [" + self.epochFormat(msg_list[i][2]) + "]"\
+            " (" + str(self.timeSinceMessage(msg_list[i][2])) + ")" + ": " + str(msg_list[i][1]) + "<br /></i>"
         return messages
+
+    @cherrypy.expose
+    def searchMessage(self, msg_phrase):
+        c = sqlite3.connect(DB_STRING)
+        cur = c.cursor()
+        cur.execute("SELECT sender, destination, msg, stamp FROM msg WHERE msg LIKE ('%' || ? || '%')", [msg_phrase])
+        msg_list = cur.fetchall()
+        messages = ''
+        for i in range(0, len(msg_list)):
+            if msg_list[i][0] == cherrypy.session['username']: # if the msg is a sent message
+                messages += '<i><b>You sent ' + str(msg_list[i][1]) + ':</b>' + " [" + self.epochFormat(msg_list[i][3]) + "]"\
+                " (" + str(self.timeSinceMessage(msg_list[i][3])) + ")" + ": " + str(msg_list[i][2]) + "<br /></i>"
+            else: # msg is a received message
+                messages += '<i><b>' + str(msg_list[i][0]) + '</b>' + " [" + self.epochFormat(msg_list[i][3]) + "]" + \
+                " (" + str(self.timeSinceMessage(msg_list[i][3])) + ")" + " messaged you: " + str(msg_list[i][2]) + "<br /></i>"
+        return messages
+
 
     def jsonEncodeMessage(self, sender, message, destination, stamp):
         output_dict = { "sender": sender, "message": message, "destination": destination, "stamp": stamp}

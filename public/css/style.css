@@ -231,6 +231,12 @@ body {
       -ms-flex-direction: column;
           flex-direction: column;
 }
+.chat b {
+  font-weight:bold;
+}
+.chat i {
+  font-size: 12px;
+}
 .container .right .write {
   position: absolute;
   bottom: 0px;
@@ -304,7 +310,7 @@ body {
   outline: 0;
   background: #f2f2f2; /*color of button*/
   border: 0;
-  text-indent: -1000px;
+  text-indent: -9999px;
   border-radius: 10px;
   margin-left: 15px;
   background-image: url("http://www.dliflc.edu/wp-content/themes/DLIFLC/images/icon-find.png");
@@ -312,6 +318,26 @@ body {
   background-position: center;
   height: 36px;
   font-size: 11px;
+  -webkit-transition: all 0.3 ease;
+  transition: all 0.3 ease;
+  cursor: pointer;
+}
+/*Styling for edit profile*/
+.profile-form input {
+  background: #f2f2f2;
+  width: 60%;
+  border: 0;
+  margin: 0 0 5px;
+  padding: 8px;
+}
+
+.profile-form button {
+  outline: 0;
+  background: #e67e22; /*color of button*/
+  border: 0;
+  padding: 4px;
+  color: #ffffff; /*color of text*/
+  font-size: 15px;
   -webkit-transition: all 0.3 ease;
   transition: all 0.3 ease;
   cursor: pointer;
