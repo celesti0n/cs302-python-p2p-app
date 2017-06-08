@@ -297,13 +297,16 @@ class MainApp(object):
         if (error_code == '0'):
             for i in range(0, users_online):
                 data = api_format.split() # split each user into different list element
-                try: # if user has only provided the required 5 params
+                try: # try to store optional pubkey argument
+                    username,location,ip,port,epoch_time,pubkey = data[i].split(",",5)
+                    with sqlite3.connect(DB_STRING) as c:
+                         c.execute("INSERT INTO user_string(username, location, ip, port, lastlogin, pubkey) VALUES (?,?,?,?,?,?)",
+                         [username, location, ip, port, epoch_time, pubkey])
+                except: # if user hasn't implemented pubkey
                     username,location,ip,port,epoch_time = data[i].split(",",4)
                     with sqlite3.connect(DB_STRING) as c:
                          c.execute("INSERT INTO user_string(username, location, ip, port, lastlogin) VALUES (?,?,?,?,?)",
                          [username, location, ip, port, epoch_time])
-                except: # somebody is providing pubkey information
-                    return "someone is providing pubkey information, store pubkey"
             return "There are " + str(users_online) + " users online."
         else:
             return api_call
