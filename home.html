@@ -11,8 +11,8 @@
     <div class="topnav">
     <a href="./home">fort secure chat</a>
     <a href="./viewProfiles">view profiles</a>
-    <a href="./files">files</a>
-    <a href="./logs">logs</a>
+    <a href="./files">view files</a>
+    <a href="./logs">message logs</a>
     <a href="/logoff/">log off USER_NAME</a></ul>
   </div>
 <!--START OF MSGING WINDOW-->
@@ -43,26 +43,13 @@
 </div>
 
 <!-- END OF MSGING WINDOW-->
-<div class="form"><i>send a message the old-fashioned way</i><br /><br />
+<div class="form">...or send a message the traditional way<br /><br />
   <form class="login-form" method = "post" action = "/sendMessage/">
     <input type="text" placeholder="who do you want to send to?" name = "destination"/>
     <input type="text" placeholder="message" name = "message"/>
   <button type = "button">send it!</button> <!--out of action for now-->
   </form>
-</div><br><br>
-<b>stuff for debugging</b>
-<div id = "list-of-online-users">LIST_OF_ONLINE_USERS</div><br>
-      <i>Here's the messages you have received: </i>
-      <br>
-      <div id = "received-message-list">RECEIVED_MESSAGE_LIST</div>
-      <br><hr>
-      <i>Here's the messages you have sent: </i>
-      <br>
-      <div id = "sent-message-list">SENT_MESSAGE_LIST</div>
-    </div>
-    <hr>
-    <br>
-    <br>
+</div>
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
 <script src="/static/js/refresh.js"></script>
 <script src="/static/js/home.js"></script>

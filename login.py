@@ -83,6 +83,7 @@ class MainApp(object):
         except:
             return "You are not logged in. Click " + "<a href='/'>here</a> to login"
         data = data.replace("USER_FILES", self.displayFile())
+        data = data.replace("USERS_ONLINE", self.getList())
         if (self.file_sent == 1):
             data = data.replace("FILE_STATUS", "File successfully sent.")
         else:
@@ -561,28 +562,37 @@ class MainApp(object):
                     files += 'From: ' + '<b>' + str(file_list[i][0]) + '</b>' + \
                     '<br /><img alt="image" height="120" width="120" src="data:' + str(file_list[i][3]) + ';base64,' + str(file_list[i][1]) + '"><br />' + \
                     'Name: ' + str(file_list[i][2]) + '<br />' + 'Type: ' + str(file_list[i][3]) + '<br />' + \
-                    'Time sent: ' + self.epochFormat(file_list[i][4]) + '<br /><br />'
+                    'Time sent: ' + self.epochFormat(file_list[i][4]) + '<br /><br /><hr>'
                 elif ("video/" in str(file_list[i][3])):
                     files += 'From: ' + '<b>' + str(file_list[i][0]) + '</b>' + \
                     '<br /><video height="300" width="300" controls><source type="' + str(file_list[i][3]) + '"src="data:' + str(file_list[i][3]) + \
                     ';base64,' + str(file_list[i][1]) + '"></video>' + '<br /> Name: ' + str(file_list[i][2]) + '<br /> Type: ' + \
-                    str(file_list[i][3]) + '<br /> Time sent: ' + self.epochFormat(file_list[i][4]) + '<br /><br />'
+                    str(file_list[i][3]) + '<br /> Time sent: ' + self.epochFormat(file_list[i][4]) + '<br /><br /><hr>'
                 elif ("audio/" in str(file_list[i][3])):
                     files += 'From: ' + '<b>' + str(file_list[i][0]) + '</b>' + \
                     '<br /><audio controls src="data:' + str(file_list[i][3]) + ';base64,' + str(file_list[i][1]) + '"></audio>' + \
                     '<br />Name: ' + str(file_list[i][2]) + '<br />' + 'Type: ' + str(file_list[i][3]) + '<br />' + \
-                    'Time sent: ' + self.epochFormat(file_list[i][4]) + '<br /><br />'
+                    'Time sent: ' + self.epochFormat(file_list[i][4]) + '<br /><br /><hr>'
                 else: # provide a download link (to say, PDFs)
                     files += 'From: ' + '<b>' + str(file_list[i][0]) + '</b>' + \
                     '<br /><a download href="data:' + str(file_list[i][3]) + ';base64,' + str(file_list[i][1]) + '">Download ' + \
                     str(file_list[i][2]) + '</a>' + '<br />Name: ' + str(file_list[i][2]) + '<br />' + 'Type: ' + \
-                    str(file_list[i][3]) + '<br />' + 'Time sent: ' + self.epochFormat(file_list[i][4]) + '<br /><br />'
+                    str(file_list[i][3]) + '<br />' + 'Time sent: ' + self.epochFormat(file_list[i][4]) + '<br /><br /><hr>'
             if not files: # no files were found
                 return 'No files were found.'
             return files
         except:
             return 'An error occurred when attempting to display files'
 
+    @cherrypy.expose
+    def displayFileForm(self):
+        return """
+            <div class="form">
+            <form class="login-form" method = "post" action = "/sendFile/" enctype="multipart/form-data">
+              <input type="text" placeholder="recipient of file" name = "destination"/>
+              <input type="file" name = "file"/>
+            <button type = "submit" value="Send">send file!</button>
+            </form>"""
 
     @cherrypy.expose
     def displayReceivedMessage(self):

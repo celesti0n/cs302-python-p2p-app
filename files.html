@@ -11,27 +11,35 @@
   <div class="topnav">
   <a href="./home">fort secure chat</a>
   <a href="./viewProfiles">view profiles</a>
-  <a href="./files">files</a>
-  <a href="./logs">logs</a>
+  <a href="./files">view files</a>
+  <a href="./logs">message logs</a>
   <a href="/logoff/">log off USER_NAME</a></ul>
 </div>
-    <h1><center>USER_NAME's files</center></h1><br>
-  <center>
-    <b>send a file</b><br />
-    <div class="form">
-    <form class="login-form" method = "post" action = "/sendFile/" enctype="multipart/form-data">
-      <input type="text" placeholder="recipient of file" name = "destination"/>
-      <input type="file" name = "file"/>
-    <button type = "submit" value="Send">send file!</button>
-    </form>
+<div class="wrapper">
+  <div class="container">
+      <div class="left">
+          <div class="top"><div id="users-online">USERS_ONLINE</div>
+          </div>
+          <ul class="people">
+              <li class="person"><img src="send.png" height="32" width = "32"/><span class="name">Send a file</span>
+              <span class="preview"></span></li>
+              <li class="person"> <img src="receive.png" height="32" width = "32"/><span class="name">Your received files</span>
+              <span class="preview"></span></li>
+          </ul>
+      </div>
+      <div class="right">
+          <div class="top"><span><span class="name">USER_NAME's files</span></span></div>
+                <div class="chat">
+                <div class="bubble you">To send a file, click the 'Send a file' option on the left.</div>
+                <div class="bubble you">To view a file sent to you, click the 'Your received files' option.</div>
+                <div class="bubble you">An embedded media player for all types of multimedia have been provided.</div>
+                <div class="bubble you">If a file sent is not multimedia, you will be able to click to download the file.</div>
+                </div>
+          </div>
+      </div>
   </div>
-      <form class="login-form" method = "get" action = "/listUsers/">
-      <button type = "submit">view total users</button>
-    </form></center>
-    <hr>
-    <b>View/download your received files!</b>
-    <br /><br />
-    USER_FILES
-    <br />
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+<script src="/static/js/files.js"></script>
 </body>
 </html>
