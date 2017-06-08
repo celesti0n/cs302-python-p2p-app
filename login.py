@@ -50,7 +50,7 @@ class MainApp(object):
         data = f.read()
         f.close()
         try:
-            data = data.replace("USER_NAME", cherrypy.session['username'])
+            data = data.replace("USER_NAME", cherrypy.session.get('username'))
         except:
             return "You are not logged in. Click " + "<a href='/'>here</a> to login"
         data = data.replace("USERS_ONLINE", self.getList())
@@ -67,7 +67,7 @@ class MainApp(object):
         data = f.read()
         f.close()
         try:
-            data = data.replace("USER_NAME", cherrypy.session['username'])
+            data = data.replace("USER_NAME", cherrypy.session.get('username'))
         except:
             return "You are not logged in. Click " + "<a href='/'>here</a> to login"
         data = data.replace("PROFILE_DETAILS", self.displayProfile())
@@ -79,7 +79,7 @@ class MainApp(object):
         data = f.read()
         f.close()
         try:
-            data = data.replace("USER_NAME", cherrypy.session['username'])
+            data = data.replace("USER_NAME", cherrypy.session.get('username'))
         except:
             return "You are not logged in. Click " + "<a href='/'>here</a> to login"
         data = data.replace("USER_FILES", self.displayFile())
@@ -96,7 +96,7 @@ class MainApp(object):
         data = f.read()
         f.close()
         try:
-            data = data.replace("USER_NAME", cherrypy.session['username'])
+            data = data.replace("USER_NAME", cherrypy.session.get('username'))
         except:
             return "You are not logged in. Click " + "<a href='/'>here</a> to login"
         data = data.replace("LIST_OF_TOTAL_USERS", self.listAllUsers())
@@ -108,7 +108,7 @@ class MainApp(object):
         f = open("logs.html", "r")
         data = f.read()
         try:
-            data = data.replace("USER_NAME", cherrypy.session['username'])
+            data = data.replace("USER_NAME", cherrypy.session.get('username'))
         except:
             return "You are not logged in. Click " + "<a href='/'>here</a> to login"
         f.close()
@@ -132,8 +132,8 @@ class MainApp(object):
             print("twoFA successfully authenticated")
             with sqlite3.connect(DB_STRING) as c:
                  c.execute("INSERT INTO user_credentials(username, password, location, ip, port) VALUES (?,?,?,?,?)",
-                 [cherrypy.session['username'], cherrypy.session['password'], cherrypy.session['location'],
-                 cherrypy.session['ip'],cherrypy.session['port']])
+                 [cherrypy.session.get('username'), cherrypy.session.get('password'), cherrypy.session.get('location'),
+                 cherrypy.session.get('ip'),cherrypy.session.get('port')])
             raise cherrypy.HTTPRedirect('/home')
         else:
             self.logged_on = 2
@@ -188,7 +188,7 @@ class MainApp(object):
         total_users = len(total_users_list)
         total_users_string = ''
         for i in range(0, total_users):
-            if total_users_list[i] != cherrypy.session['username']: # don't add the current user to list of possible contacts
+            if total_users_list[i] != cherrypy.session.get('username'): # don't add the current user to list of possible contacts
                 with sqlite3.connect(DB_STRING) as c:
                      c.execute("INSERT INTO total_users(username) VALUES (?)",
                      [total_users_list[i]])
@@ -288,7 +288,7 @@ class MainApp(object):
     def getList(self):
         with sqlite3.connect(DB_STRING) as c:
              c.execute("DELETE FROM user_string") # in order to avoid dupes in table
-        params = {'username':cherrypy.session['username'], 'password':cherrypy.session['password']}
+        params = {'username':cherrypy.session.get('username'), 'password':cherrypy.session.get('password')}
         full_url = 'http://cs302.pythonanywhere.com/getList?' + urllib.urlencode(params)
         api_call = urllib2.urlopen(full_url).read()
         error_code = api_call[0] # error code is always first character in string
@@ -322,7 +322,7 @@ class MainApp(object):
 
     @cherrypy.expose
     def logoff(self):
-        params = {'username':cherrypy.session['username'], 'password':cherrypy.session['password']}
+        params = {'username':cherrypy.session.get('username'), 'password':cherrypy.session.get('password')}
         full_url = 'http://cs302.pythonanywhere.com/logoff?' + urllib.urlencode(params)
         api_call = urllib2.urlopen(full_url).read()
         error_code = api_call[0]
@@ -352,7 +352,8 @@ class MainApp(object):
 
     @cherrypy.expose
     def listAPI(self):
-        return '/ping /listAPI /receiveMessage [sender] [destination] [message] [stamp] /getProfile [profile_username] [sender]'+ \
+        return '/ping /listAPI /receiveMessage [sender] [destination] [message] [stamp] [markdown(opt)]' +\
+         '/getProfile [profile_username] [sender]'+ \
         ' /receiveFile [sender] [destination] [file] [filename] [content_type] [stamp] /getStatus [profile_username]'
 
     @cherrypy.expose
@@ -384,7 +385,7 @@ class MainApp(object):
             ip = values_tuple[0][0]
             port = values_tuple[0][1]
             # message data must be encoded into JSON
-            postdata = self.jsonEncodeMessage(cherrypy.session['username'], message, destination, int(time.time()))
+            postdata = self.jsonEncodeMessage(cherrypy.session.get('username'), message, destination, int(time.time()))
             req = urllib2.Request("http://" + ip + ":" + port + "/receiveMessage",
                                  postdata, {'Content-Type': 'application/json'})
             try:
@@ -395,7 +396,7 @@ class MainApp(object):
             print "Message sent to client: " + destination
             with sqlite3.connect(DB_STRING) as c:
                  c.execute("INSERT INTO msg(sender, destination, msg, stamp) VALUES (?,?,?,?)",
-                 [cherrypy.session['username'], destination, message, int(time.time())])
+                 [cherrypy.session.get('username'), destination, message, int(time.time())])
             raise cherrypy.HTTPRedirect("/home")
         else:
             return "something happened"
@@ -431,7 +432,7 @@ class MainApp(object):
         else:
             ip = values[0]
             port = values[1]
-            profile_dict = {"profile_username": profile_username, "sender": cherrypy.session['username']}
+            profile_dict = {"profile_username": profile_username, "sender": cherrypy.session.get('username')}
             params = json.dumps(profile_dict)
             req = urllib2.Request("http://" + ip + ":" + port + "/getProfile",
                                  params, {'Content-Type': 'application/json'})
@@ -463,7 +464,7 @@ class MainApp(object):
             c = sqlite3.connect(DB_STRING)
             cur = c.cursor()
             cur.execute("SELECT fullname, position, description, location, picture FROM profiles WHERE profile_username=?",
-                        [cherrypy.session['username']])
+                        [cherrypy.session.get('username')])
             profile_info = cur.fetchone()
             fullname = profile_info[0]
             position = profile_info[1]
@@ -505,9 +506,9 @@ class MainApp(object):
         cur = c.cursor()
         cur.execute ("""
         UPDATE profiles SET fullname=?,position=?,description=?,location=?,picture=? WHERE profile_username=?""",
-        (fullname, position, description, location, picture, cherrypy.session['username']))
+        (fullname, position, description, location, picture, cherrypy.session.get('username')))
         c.commit() # thank you stack overflow
-        print(cherrypy.session['username'])
+        print(cherrypy.session.get('username'))
         raise cherrypy.HTTPRedirect("/viewProfiles")
 
     @cherrypy.expose
@@ -538,7 +539,7 @@ class MainApp(object):
             return "3: Client Currently Unavailable"
         # check if their listAPI contains receiveFile, or the function won't work
         # if (self.checkListAPI(destination, 'receiveFile')): # if they do have receiveFile
-        file_dict = {"sender": cherrypy.session['username'], "destination": destination, "file": base64.b64encode(file.file.read()),
+        file_dict = {"sender": cherrypy.session.get('username'), "destination": destination, "file": base64.b64encode(file.file.read()),
                     "filename": str(file.filename), "content_type": str(file.content_type), "stamp": int(time.time())}
         print(file_dict)
         params = json.dumps(file_dict)
@@ -562,7 +563,7 @@ class MainApp(object):
             c = sqlite3.connect(DB_STRING)
             cur = c.cursor()
             cur.execute("SELECT sender, file, filename, content_type, stamp FROM files WHERE destination=?",
-            [cherrypy.session['username']])
+            [cherrypy.session.get('username')])
             file_list = cur.fetchall()
             files =''
 
@@ -609,7 +610,7 @@ class MainApp(object):
         c = sqlite3.connect(DB_STRING)
         cur = c.cursor()
         cur.execute("SELECT sender, msg, stamp FROM msg WHERE destination=?",
-        [cherrypy.session['username']])
+        [cherrypy.session.get('username')])
         msg_list = cur.fetchall()
         messages = ''
         for i in range(0, len(msg_list)):
@@ -637,7 +638,7 @@ class MainApp(object):
         c = sqlite3.connect(DB_STRING)
         cur = c.cursor()
         cur.execute("SELECT destination, msg, stamp FROM msg WHERE sender=?",
-        [cherrypy.session['username']])
+        [cherrypy.session.get('username')])
         msg_list = cur.fetchall()
         messages = ''
         for i in range(0, len(msg_list)):
@@ -653,7 +654,7 @@ class MainApp(object):
         msg_list = cur.fetchall()
         messages = ''
         for i in range(0, len(msg_list)):
-            if msg_list[i][0] == cherrypy.session['username']: # if the msg is a sent message
+            if msg_list[i][0] == cherrypy.session.get('username'): # if the msg is a sent message
                 messages += '<i><b>You sent ' + str(msg_list[i][1]) + ':</b>' + " [" + self.epochFormat(msg_list[i][3]) + "]"\
                 " (" + str(self.timeSinceMessage(msg_list[i][3])) + ")" + ": " + str(msg_list[i][2]) + "<br /></i>"
             else: # msg is a received message
