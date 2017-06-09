@@ -672,8 +672,6 @@ class MainApp(object):
         cur.execute("SELECT sender, destination, msg, stamp FROM msg WHERE msg LIKE ('%' || ? || '%')", [msg_phrase])
         msg_list = cur.fetchall()
         messages = ''
-        if not messages:
-            return 'No messages found with your search query: ' + msg_phrase
         for i in range(0, len(msg_list)):
             if msg_list[i][0] == cherrypy.session.get('username'): # if the msg is a sent message
                 messages += '<i><b>You sent ' + str(msg_list[i][1]) + ':</b>' + " [" + self.epochFormat(msg_list[i][3]) + "]"\
@@ -681,7 +679,10 @@ class MainApp(object):
             else: # msg is a received message
                 messages += '<i><b>' + str(msg_list[i][0]) + '</b>' + " [" + self.epochFormat(msg_list[i][3]) + "]" + \
                 " (" + str(self.timeSinceMessage(msg_list[i][3])) + ")" + " messaged you: " + str(msg_list[i][2]) + "<br /></i>"
-        return messages
+        if not messages:
+            return 'No messages found for the term: ' + msg_phrase
+        else:
+            return messages
 
 
     def jsonEncodeMessage(self, sender, message, destination, stamp, markdown=0):
