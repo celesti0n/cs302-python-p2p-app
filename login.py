@@ -10,6 +10,7 @@ import sys
 import datetime
 import base64
 import markdown
+import threading
 
 from json import load
 from urllib2 import urlopen
@@ -23,7 +24,35 @@ reload(sys)
 sys.setdefaultencoding('utf8')
 listen_ip = '192.168.20.2'# socket.gethostbyname(socket.getfqdn())
 listen_port = 10002
+api_calls = 0
 
+def resetTimer():
+    print("API Calls timer reset")
+    global api_calls
+    api_calls = 0
+
+t = Monitor(cherrypy.engine, resetTimer, frequency=60).start()  # start threading function, 30 seconds
+
+def LimitReached():  # this function will return True if limit reached/user has been blacklisted
+    # firstly check if IP address has been blacklisted
+    ip = cherrypy.request.headers["Remote-Addr"]  # this info from header has caller IP information
+    c = sqlite3.connect(DB_STRING)
+    cur = c.cursor()
+    cur.execute("SELECT ip FROM blacklist")
+    blacklist = cur.fetchone()
+    if blacklist:  # if users were found on the blacklist
+        for i in range(0, len(blacklist)):  # search through the list
+            if ip == blacklist[i]:  # a match was found with the calling ip and somebody in the blacklist
+                print("A blacklisted user tried to call your functions")
+                return True
+    global api_calls
+    api_calls = api_calls + 1
+    print('Current calls:' + str(api_calls))
+    if (api_calls > 10):  # if 11 people have called my functions within 60 seconds
+        print("Rate limit activated, a user was blocked from your API")
+        return True  #  block the request and return Error 11: Blacklisted or Rate Limited (done in other funcs)
+    else:
+        return False # let the user have the information
 
 class MainApp(object):
     logged_on = 0  # 0 = never tried to log on, 1 = success, 2 = tried and failed, 3 = success and logged out
@@ -177,6 +206,25 @@ class MainApp(object):
         return auth
 
     @cherrypy.expose
+    def blackList(self, choice, username):
+        if choice == 'Block':  # if user chose Block from dropdown
+            c = sqlite3.connect(DB_STRING) # to find the IP address of the blocked user, search the
+            cur = c.cursor()
+            cur.execute("SELECT ip FROM user_string WHERE username=?", [username])
+            creds = cur.fetchone()
+            if not creds:  # couldn't found username's IP address
+                return 'IP not found, user may not be online. Click ' + '<a href="/home">here</a> to go back.'
+            else:
+                with sqlite3.connect(DB_STRING) as c:
+                    c.execute("INSERT INTO blacklist(username, ip) VALUES (?,?)",
+                    [username,creds[0]])
+        else: # Unblock was chosen
+            with sqlite3.connect(DB_STRING) as c:
+                c.execute("DELETE FROM blacklist WHERE username=?", [username])
+        raise cherrypy.HTTPRedirect('/home')  # refresh the page
+
+
+    @cherrypy.expose
     def listAllUsers(self):
         with sqlite3.connect(DB_STRING) as c:
             c.execute("DELETE FROM total_users")  # in order to avoid dupes in table
@@ -221,12 +269,15 @@ class MainApp(object):
     @cherrypy.expose
     @cherrypy.tools.json_in()
     def getStatus(self): # other people call this to get my status
-        c = sqlite3.connect(DB_STRING)
-        cur = c.cursor()
-        cur.execute("SELECT status FROM user_status WHERE profile_username=?", [cherrypy.request.json['profile_username']])
-        credentials = cur.fetchone()
-        print("Someone grabbed your profile status!")
-        return json.dumps(credentials[0])  # return out a JSON encoded string
+        if LimitReached():
+            return 'Error 11: Blacklisted or Rate Limited'
+        else:
+            c = sqlite3.connect(DB_STRING)
+            cur = c.cursor()
+            cur.execute("SELECT status FROM user_status WHERE profile_username=?", [cherrypy.request.json['profile_username']])
+            credentials = cur.fetchone()
+            print("Someone grabbed your profile status!")
+            return json.dumps(credentials[0])  # return out a JSON encoded string
 
     @cherrypy.expose
     def setStatus(self, status):  # this function is called internally to set our own status, don't bother with JSON
@@ -239,28 +290,32 @@ class MainApp(object):
 
     @cherrypy.expose
     def grabStatus(self, username):
-        c = sqlite3.connect(DB_STRING)
-        cur = c.cursor()
-        cur.execute("SELECT ip, port FROM user_string WHERE username=?",[username])
-        values = cur.fetchone()
-        if not values:
-            return 'Offline'
-        else:
-            ip = values[0]
-            port = values[1]
-            profile_dict = {"profile_username": username}
-            params = json.dumps(profile_dict)
-            req = urllib2.Request("http://" + ip + ":" + port + "/getStatus",
-                                 params, {'Content-Type': 'application/json'})
-            try:
-                response = urllib2.urlopen(req).read()   # Client will get a JSON-encoded status in return
-                print "Status grabbed from: " + username
-                with sqlite3.connect(DB_STRING) as c:
-                    c.execute("INSERT INTO user_status(profile_username, status) VALUES (?,?)",
-                    [username, json.load(response)]) # store the decoded JSON response
-                return response
-            except:
-                return self.checkOnline(username)
+        try:
+            c = sqlite3.connect(DB_STRING)
+            cur = c.cursor()
+            cur.execute("SELECT ip, port FROM user_string WHERE username=?",[username])
+            values = cur.fetchone()
+            if not values:
+                return 'Offline'
+            else:
+                ip = values[0]
+                port = values[1]
+                profile_dict = {"profile_username": username}
+                params = json.dumps(profile_dict)
+
+                try:
+                    req = urllib2.Request("http://" + ip + ":" + port + "/getStatus",
+                    params, {'Content-Type': 'application/json'})
+                    response = urllib2.urlopen(req).read()   # Client will get a JSON-encoded status in return
+                    print "Status grabbed from: " + username
+                    with sqlite3.connect(DB_STRING) as c:
+                        c.execute("INSERT INTO user_status(profile_username, status) VALUES (?,?)",
+                        [username, json.load(response)]) # store the decoded JSON response
+                    return response
+                except:
+                    return self.checkOnline(username)
+        except:
+            return "Error grabbing status data"
 
 
     @cherrypy.expose
@@ -358,7 +413,12 @@ class MainApp(object):
 
     @cherrypy.expose
     def logoff(self):
-        params = {'username':cherrypy.session.get('username'), 'password':cherrypy.session.get('password')}
+        c = sqlite3.connect(DB_STRING)
+        cur = c.cursor()
+        cur.execute("SELECT username, password FROM user_credentials WHERE username=?",
+        [cherrypy.session.get('username')])
+        user_cred = cur.fetchone()
+        params = {'username':user_cred[0], 'password':user_cred[1]}
         full_url = 'http://cs302.pythonanywhere.com/logoff?' + urllib.urlencode(params)
         api_call = urllib2.urlopen(full_url).read()
         error_code = api_call[0]
@@ -393,26 +453,25 @@ class MainApp(object):
         ' /receiveFile [sender] [destination] [file] [filename] [content_type] [stamp] /getStatus [profile_username]'
 
     @cherrypy.expose
-    @cherrypy.tools.json_in()  # read documentation, all json input parameters stored in cherrypy.request.json
-    def receiveMessage(self):  # opt args: markdown, encoding, ecnryption, hashing, hash
-        # refactor this to take in a single argument which is of type JSON, use  @cherrypy.json_in() decorator
-        try:  # try to receive a message with additional markdown encoding argument
-            with sqlite3.connect(DB_STRING) as c:
-                c.execute("INSERT INTO msg(sender, destination, msg, stamp) VALUES (?,?,?,?)",
-                [cherrypy.request.json['sender'], cherrypy.request.json['destination'],
-                 cherrypy.request.json['message'], cherrypy.request.json['stamp'], cherrypy.request.json['markdown']])
-            print "Message received from " + cherrypy.request.json['sender']
-            return '0'
-        except:  # if it doesn't work, just store without the markdown encoding argument
-            with sqlite3.connect(DB_STRING) as c:
-                c.execute("INSERT INTO msg(sender, destination, msg, stamp) VALUES (?,?,?,?)",
-                [cherrypy.request.json['sender'], cherrypy.request.json['destination'],
-                 cherrypy.request.json['message'], cherrypy.request.json['stamp']])
-            print "Message received from " + cherrypy.request.json['sender']
-            return '0'
-        # else: # message was meant for somebody else
-        #     print("Passing this message on: " + cherrypy.request.json['message'] + ". It was meant for " + \
-        #     cherrypy.request.json['destination'])
+    @cherrypy.tools.json_in()  # according to docs, all json input parameters stored in cherrypy.request.json
+    def receiveMessage(self):
+        if LimitReached():  # implements rate limiting to regulate API calls, if true - block user from accessing info
+            return 'Error 11: Blacklisted or Rate Limited'
+        else:  # continue on with life
+            try:  # try to receive message with markdown encoding arg
+                with sqlite3.connect(DB_STRING) as c:
+                    c.execute("INSERT INTO msg(sender, destination, msg, stamp) VALUES (?,?,?,?)",
+                    [cherrypy.request.json['sender'], cherrypy.request.json['destination'],
+                     cherrypy.request.json['message'], cherrypy.request.json['stamp'], cherrypy.request.json['markdown']])
+                print "Message received from " + cherrypy.request.json['sender']
+                return '0'
+            except:  # if it doesn't work, just store without the markdown encoding argument
+                with sqlite3.connect(DB_STRING) as c:
+                    c.execute("INSERT INTO msg(sender, destination, msg, stamp) VALUES (?,?,?,?)",
+                    [cherrypy.request.json['sender'], cherrypy.request.json['destination'],
+                     cherrypy.request.json['message'], cherrypy.request.json['stamp']])
+                print "Message received from " + cherrypy.request.json['sender']
+                return '0'
 
     @cherrypy.expose
     def sendMessage(self, destination, message):
@@ -456,20 +515,23 @@ class MainApp(object):
     @cherrypy.tools.json_in()  # profile_username and sender input is stored in cherrypy.request.json
     @cherrypy.tools.json_out(content_type='application/json')  # allows the output to be of type application/json instead of text/html
     def getProfile(self):  # this function is called by OTHER people to grab my data. use displayProfile to see my own, grabProfile to get others
-        try:
-            c = sqlite3.connect(DB_STRING)
-            cur = c.cursor()
-            cur.execute("SELECT fullname, position, description, location, picture FROM profiles WHERE profile_username=?",
-                        [cherrypy.request.json['profile_username']])
-            profile_info = cur.fetchone()
-            postdata = {"fullname": profile_info[0], "position":profile_info[1],
-                        "description":profile_info[2],"location":profile_info[3],
-                        "picture":profile_info[4]}
-            print("Someone grabbed your profile details!")
-            return postdata
-        except:
-            print("Somebody TRIED to grab your profile details.")
-            return "4: Database Error"
+        if LimitReached():
+            return 'Error 11: Blacklisted or Rate Limited'
+        else:
+            try:
+                c = sqlite3.connect(DB_STRING)
+                cur = c.cursor()
+                cur.execute("SELECT fullname, position, description, location, picture FROM profiles WHERE profile_username=?",
+                            [cherrypy.request.json['profile_username']])
+                profile_info = cur.fetchone()
+                postdata = {"fullname": profile_info[0], "position":profile_info[1],
+                            "description":profile_info[2],"location":profile_info[3],
+                            "picture":profile_info[4]}
+                print("Someone grabbed your profile details!")
+                return postdata
+            except:
+                print("Somebody TRIED to grab your profile details.")
+                return "4: Database Error"
 
     @cherrypy.expose
     def grabProfile(self, profile_username, sender=''):  # this function is called by me
@@ -796,3 +858,4 @@ if __name__ == '__main__':
         cherrypy.engine.block()
     finally:  # on application exit
         MainApp().logoffForced()
+        rateLimitingThread.stop()
