@@ -21,7 +21,7 @@ from cherrypy.process.plugins import Monitor
 DB_STRING = "users.db"
 reload(sys)
 sys.setdefaultencoding('utf8')
-listen_ip = '172.23.80.69'  # socket.gethostbyname(socket.getfqdn())
+listen_ip = '192.168.20.2'# socket.gethostbyname(socket.getfqdn())
 listen_port = 10002
 
 
@@ -139,7 +139,7 @@ class MainApp(object):
             raise cherrypy.HTTPRedirect('/')
 
     @cherrypy.expose
-    def report(self, username, password, location='1', ip='202.36.244.13', port=listen_port):  # change ip = back to listen_ip
+    def report(self, username, password, location='2', ip='180.148.103.204', port=listen_port):  # change ip = back to listen_ip
         # print(ip)
         hashedPassword = encrypt.hash(password)  # call hash function for SHA256 encryption
         auth = self.authoriseUserLogin(username, hashedPassword, location, ip, port)
@@ -207,17 +207,6 @@ class MainApp(object):
         else:
             return ''.join(pic)  # tuple to string
 
-    def getDescription(self, user):
-        c = sqlite3.connect(DB_STRING)
-        cur = c.cursor()
-        cur.execute("SELECT description FROM profiles WHERE profile_username=?",
-                    [user])
-        desc = cur.fetchone()
-        if not desc:  # no desc found
-            return 'No description'  # return default pic
-        else:
-            return ''.join(desc)  # tuple to string
-
     def checkOnline(self, user):
         c = sqlite3.connect(DB_STRING)
         cur = c.cursor()
@@ -227,7 +216,52 @@ class MainApp(object):
             return ''
         else:
             return 'Online now!'
-        # refactor this to try and call getStatus, if user provides it then show getStatus, if not then revert to current implem
+
+
+    @cherrypy.expose
+    @cherrypy.tools.json_in()
+    def getStatus(self): # other people call this to get my status
+        c = sqlite3.connect(DB_STRING)
+        cur = c.cursor()
+        cur.execute("SELECT status FROM user_status WHERE profile_username=?", [cherrypy.request.json['profile_username']])
+        credentials = cur.fetchone()
+        print("Someone grabbed your profile status!")
+        return json.dumps(credentials[0])  # return out a JSON encoded string
+
+    @cherrypy.expose
+    def setStatus(self, status):  # this function is called internally to set our own status, don't bother with JSON
+        c = sqlite3.connect(DB_STRING)
+        cur = c.cursor()
+        cur.execute("""
+        UPDATE user_status SET status=? WHERE profile_username=?""",
+        (status, cherrypy.session.get('username')))
+        c.commit()  # thank you stack overflow
+
+    @cherrypy.expose
+    def grabStatus(self, username):
+        c = sqlite3.connect(DB_STRING)
+        cur = c.cursor()
+        cur.execute("SELECT ip, port FROM user_string WHERE username=?",[username])
+        values = cur.fetchone()
+        if not values:
+            return 'Offline'
+        else:
+            ip = values[0]
+            port = values[1]
+            profile_dict = {"profile_username": username}
+            params = json.dumps(profile_dict)
+            req = urllib2.Request("http://" + ip + ":" + port + "/getStatus",
+                                 params, {'Content-Type': 'application/json'})
+            try:
+                response = urllib2.urlopen(req).read()   # Client will get a JSON-encoded status in return
+                print "Status grabbed from: " + username
+                with sqlite3.connect(DB_STRING) as c:
+                    c.execute("INSERT INTO user_status(profile_username, status) VALUES (?,?)",
+                    [username, json.load(response)]) # store the decoded JSON response
+                return response
+            except:
+                return self.checkOnline(username)
+
 
     @cherrypy.expose
     def getChatConvo(self, username='entry'):
@@ -438,48 +472,52 @@ class MainApp(object):
             return "4: Database Error"
 
     @cherrypy.expose
-    def grabProfile(self, profile_username, sender=''):  # this function is called by me to grab other people's JSON encoded data and decode it to string.
-        c = sqlite3.connect(DB_STRING)
-        cur = c.cursor()
-        cur.execute("SELECT ip, port FROM user_string WHERE username=?",
-                    [profile_username])
-        values = cur.fetchone()
-        if not values:
-            return '3: Client Currently Unavailable'
-        else:
-            ip = values[0]
-            port = values[1]
-            profile_dict = {"profile_username": profile_username, "sender": cherrypy.session.get('username')}
-            params = json.dumps(profile_dict)
-            req = urllib2.Request("http://" + ip + ":" + port + "/getProfile",
-                                 params, {'Content-Type': 'application/json'})
-            response = urllib2.urlopen(req).read()
-            try:  # if response is not valid JSON, json.loads should throw a ValueError
-                print "Profile details grabbed: " + profile_username
-                c = sqlite3.connect(DB_STRING)
-                cur = c.cursor()
-                cur.execute("SELECT profile_username FROM profiles WHERE profile_username=?",
-                            [profile_username])
-                values = cur.fetchone()  # check if profile grab target is already in database
-                if not values:  # if search is empty, insert their details into table
-                    with sqlite3.connect(DB_STRING) as c:
-                        # decode response
-                        response_str = json.loads(response)
-                        c.execute("INSERT INTO profiles(profile_username, fullname, position, description, location, picture) VALUES (?,?,?,?,?,?)",
-                        (profile_username, response_str["fullname"], response_str["position"], response_str["description"],
-                        response_str["location"], response_str["picture"]))
-                    return self.displayProfile(profile_username)
-                else:  # they are already in the table, no need to duplicate insert
-                    return self.displayProfile(profile_username)
-            except ValueError:
-                print "An error occurred. The target user is not returning a JSON encoding their profile info."
-                return response
+    def grabProfile(self, profile_username, sender=''):  # this function is called by me
+        try:  # first try to fetch data from the local database, if we have something
+            return self.displayProfile(profile_username) # REMOVE THIS LATER... WE WANT THE LATEST PROFILE INFO!!
+        except:  # if we don't, then try to call their /getProfile to store, then do step 1
+            c = sqlite3.connect(DB_STRING)
+            cur = c.cursor()
+            cur.execute("SELECT ip, port FROM user_string WHERE username=?",
+                        [profile_username])
+            values = cur.fetchone()
+            if not values:
+                return '3: Client Currently Unavailable'
+            else:
+                ip = values[0]
+                port = values[1]
+                profile_dict = {"profile_username": profile_username, "sender": cherrypy.session.get('username')}
+                params = json.dumps(profile_dict)
+                req = urllib2.Request("http://" + ip + ":" + port + "/getProfile",
+                                     params, {'Content-Type': 'application/json'})
+                response = urllib2.urlopen(req).read()
+                try:  # if response is not valid JSON, json.loads should throw a ValueError
+                    print "Profile details grabbed: " + profile_username
+                    c = sqlite3.connect(DB_STRING)
+                    cur = c.cursor()
+                    cur.execute("SELECT profile_username FROM profiles WHERE profile_username=?",
+                                [profile_username])
+                    values = cur.fetchone()  # check if profile grab target is already in database
+                    if not values:  # if search is empty, insert their details into table
+                        with sqlite3.connect(DB_STRING) as c:
+                            # decode response
+                            response_str = json.loads(response)
+                            c.execute("INSERT INTO profiles(profile_username, fullname, position, description, location, picture) VALUES (?,?,?,?,?,?)",
+                            (profile_username, response_str["fullname"], response_str["position"], response_str["description"],
+                            response_str["location"], response_str["picture"]))
+                        return self.displayProfile(profile_username)
+                    else:  # they are already in the table, no need to duplicate insert
+                        return self.displayProfile(profile_username)
+                except ValueError:
+                    print "An error occurred. The target user is not returning a JSON encoding their profile info."
+                    return response
 
     @cherrypy.expose
     def displayProfile(self, user='entry'):
         if (user == 'entry'):
             c = sqlite3.connect(DB_STRING)
             cur = c.cursor()
+            cur2 = c.cursor()
             cur.execute("SELECT fullname, position, description, location, picture FROM profiles WHERE profile_username=?",
                         [cherrypy.session.get('username')])
             profile_info = cur.fetchone()
@@ -488,18 +526,28 @@ class MainApp(object):
             description = profile_info[2]
             location = profile_info[3]
             picture = profile_info[4]
-            return '<br />' + '<img src="' + picture + '" height="128" width="128">' + '<br />' + "<b>Full Name:</b> " + str(fullname) + '<br />' + \
-            "<b>Position:</b> " + str(position) + '<br />' + "<b>Description: </b>" + str(description) + '<br />' + "<b>Location: </b>" + str(location) + \
-            """<br /><br /><br /><b>Edit your profile</b><br /><div class="profile-form">
+            cur2.execute("SELECT status FROM user_status WHERE profile_username=?", [cherrypy.session.get('username')])
+            status_info = cur2.fetchone()
+            status = status_info[0]
+            return '<img src="' + picture + '" height="300" width="300">' + '<br />' + "<b>Full Name: </b> " + str(fullname) + \
+            "<b>Position: </b>" + str(position) + "<b>Description: </b>" + str(description) + "<b>Location: </b>" + str(location) + \
+            '<br /><b>Status:</b>' + str(status) + """<br /><b>Edit your profile</b><br /><div class="profile-form">
                 <form class="update-profile" method = "put" action = "/updateProfile/">
                   <input type="text" placeholder="full name" name = "fullname"/><br />
                   <input type="text" placeholder="position" name = "position"/><br />
                   <input type="text" placeholder="description" name = "description"/><br />
                   <input type="text" placeholder="location" name = "location"/><br />
                   <input type="text" placeholder="picture (URL link)" name = "picture"/><br />
+                  <select name = "status">
+                      <option selected="selected" disabled="disabled">Set your status</option>
+                      <option value="Online">Online</option>
+                      <option value="Idle">Idle</option>
+                      <option value="Away">Away</option>
+                      <option value="Do Not Disturb">Do Not Disturb</option>
+                      <option value="Offline">Appear Offline</option>
+                  </select>
                 <button type = "submit">update</button>
                 </form>"""
-
         else:
             try:
                 c = sqlite3.connect(DB_STRING)
@@ -512,20 +560,24 @@ class MainApp(object):
                 description = profile_info[2]
                 location = profile_info[3]
                 picture = profile_info[4]
-                return 'Profile Picture: <br />' + '<img src="' + picture + '" height="64" width="64">' + '<br />' + "Full Name: " + str(fullname) + '<br />' + \
-                "Position: " + str(position) + '<br />' + "Description: " + str(description) + '<br />' + "Location: " + str(location)
+                return '<br /><img src="' + picture + '" height="300" width="300">' + '<br />' + \
+                '<div class = "bubble you">' + '<b>Full Name:</b> ' + str(fullname) + '<br /></div>' + \
+                '<div class = "bubble you">' + '<b>Position:</b> ' + str(position) + '<br />' + \
+                '<b>Description:</b> ' + str(description) + '<br />' + "<b>Location:</b> " + str(location) + \
+                "<br /></div>Status: "
+                # + self.grabStatus(user)
             except:
-                return 'This profile has not published any information yet.'
+                return '<div class="bubble you">This profile has not published any information yet.</div>'
 
     @cherrypy.expose
-    def updateProfile(self, fullname, position, description, location, picture):
+    def updateProfile(self, fullname, position, description, location, picture, status):
         c = sqlite3.connect(DB_STRING)
         cur = c.cursor()
         cur.execute("""
         UPDATE profiles SET fullname=?,position=?,description=?,location=?,picture=? WHERE profile_username=?""",
         (fullname, position, description, location, picture, cherrypy.session.get('username')))
         c.commit()  # thank you stack overflow
-        print(cherrypy.session.get('username'))
+        self.setStatus(status)
         raise cherrypy.HTTPRedirect("/viewProfiles")
 
     @cherrypy.expose
