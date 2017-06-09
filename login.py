@@ -13,6 +13,7 @@ import sys
 import datetime
 import atexit
 import base64
+sys.path.insert(0, './Markdown')
 import markdown
 
 from json import load
@@ -26,7 +27,7 @@ from cherrypy.process.plugins import Monitor
 DB_STRING = "users.db"
 reload(sys)
 sys.setdefaultencoding('utf8')
-listen_ip = '172.23.80.69' # socket.gethostbyname(socket.getfqdn())
+listen_ip =  socket.gethostbyname(socket.getfqdn())
 listen_port = 10002
 
 class MainApp(object):
@@ -142,8 +143,7 @@ class MainApp(object):
             raise cherrypy.HTTPRedirect('/')
 
     @cherrypy.expose
-    def report(self, username, password, location='1', ip='202.36.244.13', port=listen_port): # change ip = back to listen_ip
-        # print(ip)
+    def report(self, username, password, location='0', ip=listen_ip, port=listen_port):# change ip = back to listen_ip
         hashedPassword = encrypt.hash(password)  # call hash function for SHA256 encryption
         auth = self.authoriseUserLogin(username, hashedPassword, location, ip, port)
         error_code,error_message = auth.split(",")
@@ -165,7 +165,7 @@ class MainApp(object):
             else: # could find user, go straight to /home without needing 2FA
                 raise cherrypy.HTTPRedirect('/home')
         else:
-            print("ERROR: " + error_code)
+            print("ERROR: " + auth)
             self.logged_on = 2
             raise cherrypy.HTTPRedirect('/')  # set flag to change /index function
 
