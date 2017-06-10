@@ -12,13 +12,11 @@ $(document).ready(function() {
       success: function(data){
         console.log("success getting profile");
         $(".chat").html(data);
-        return false;
       },
       timeout: 2000,
       error: function(xmlhttprequest, textstatus, message) {
         if(textstatus==="timeout") {
           alert("5: Timeout Error, user probably not online");
-          return false;
         }
       }
       });

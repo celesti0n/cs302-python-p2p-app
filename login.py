@@ -31,7 +31,7 @@ listen_ip = '192.168.20.2'# socket.gethostbyname(socket.getfqdn())
 listen_port = 10002
 api_calls = 0
 
-def resetTimer():
+def resetTimer():  # resets the api_calls counter every minute
     print("API Calls timer reset")
     global api_calls
     api_calls = 0
@@ -44,7 +44,7 @@ def LimitReached():  # this function will return True if limit reached/user has 
     c = sqlite3.connect(DB_STRING)
     cur = c.cursor()
     cur.execute("SELECT ip FROM blacklist")
-    blacklist = cur.fetchone()
+    blacklist = cur.fetchone()  # blackListing/rate-limiting has similar use cases, might as well
     if blacklist:  # if users were found on the blacklist
         for i in range(0, len(blacklist)):  # search through the list
             if ip == blacklist[i]:  # a match was found with the calling ip and somebody in the blacklist
@@ -262,7 +262,7 @@ class MainApp(object):
             cur.execute("SELECT ip, port FROM user_string WHERE username=?",[username])
             values = cur.fetchone()
             if not values:
-                return 'Offline'
+                return '3: Client Currently Unavailable'
             else:
                 ip = values[0]
                 port = values[1]
@@ -281,7 +281,7 @@ class MainApp(object):
                 except:
                     return db_calls.checkOnline(username)
         except:
-            return "Error grabbing status data"
+            return "4: Database Error"
 
 
     @cherrypy.expose
