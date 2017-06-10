@@ -1,6 +1,11 @@
+/* The following .css sheet styles all the HTML pages in the application. This was done by design choice,
+taking into consideration the pros and cons of this mentioned here:
+https://stackoverflow.com/questions/2336302/single-huge-css-file-vs-multiple-smaller-specific-css-files
+As my code goes through lots of HTTP requests, a combined file will help minimise resources used in serving pages. */
+
 @import url(https://fonts.googleapis.com/css?family=Source+Sans+Pro:400,400i,600,700);
 
-/* FORMATTING INDEX.HTML*/
+/* Format for landing page, similar (or identical) styling structure used in other forms to maintain design aesthetic*/
 .login-page {
   width: 450px;
   padding: 8% 0 0;
@@ -12,7 +17,7 @@
   z-index: 1;
   background: #ffffff;
   max-width: 450px;
-  margin: 0 auto 100px;
+  margin: 0 auto 100px; /*margins are independent of screen size*/
   padding: 45px;
   text-align: center;
   box-shadow: 0 0 20px 0 rgba(0, 0, 0, 0.2), 0 5px 5px 0 rgba(0, 0, 0, 0.24);
@@ -40,14 +45,13 @@
   cursor: pointer;
 }
 .form button:hover,.form button:active,.form button:focus {
-  background: #B25B2C;
+  background: #B25B2C; /* make the button darker on hover/click*/
 }
 
-/*END OF INDEX.HTML*/
+/*CHAT PAGE FORMATTING. All pages in the GUI use the topnav and wrapper classes for the
+CSS menu at the top and the chat/information box in the body of the page. */
 
-/*HOME.HTML CSS FORMATTING*/
-
-/* Add a black background color to the top navigation */
+/* Add a very dark blue/purple background color to the top navigation */
 .topnav {
     background-color: #334;
     overflow: hidden;
@@ -61,19 +65,13 @@
     padding-bottom: 14px;
     padding-left: 10px;
     padding-right: 20px;
-    text-decoration: none;
+    text-decoration: none; /*removes underlining*/
     font-size: 17px;
 }
 
 /* Change the color of links on hover */
 .topnav a:hover {
     color: #e37222;
-}
-
-/* Add a color to the active/current link */
-.topnav a.active {
-    color: white;
-    font-weight: bold;
 }
 
 *, *:before, *:after {
@@ -89,6 +87,7 @@ body {
   background: #3eb2ae;
 }
 
+/* Total chat box length, longer than the actual container to allow for margins at the bottom*/
 .wrapper {
   position: relative;
   left: 50%;
@@ -108,6 +107,7 @@ body {
   -webkit-transform: translate(-50%, -50%);
           transform: translate(-50%, -50%);
 }
+/*Left involves search functions/information about logged in users/list of users*/
 .container .left {
   float: left;
   width: 35%;
@@ -139,6 +139,7 @@ body {
   cursor: pointer;
   background-color: #ffffff;
 }
+/*Nice little dashed line to separate different people*/
 .container .left .people .person:after {
   position: absolute;
   bottom: 0;
@@ -151,6 +152,7 @@ body {
   -webkit-transform: translate(-50%, 0);
           transform: translate(-50%, 0);
 }
+/*Format circular profile picture, in code this is grabbed from their profile info*/
 .container .left .people .person img {
   float: left;
   width: 40px;
@@ -158,6 +160,7 @@ body {
   margin-right: 12px;
   border-radius: 50%;
 }
+
 .container .left .people .person .name {
   font-size: 14px;
   line-height: 22px;
@@ -166,15 +169,16 @@ body {
   font-weight: 600;
 }
 
+/*Preview has the little description below the name. Currently shows whether the user is online or not*/
 .container .left .people .person .preview {
   font-size: 14px;
   display: inline-block;
-  /*overflow: hidden !important;*/
   width: 80%;
   white-space: nowrap;
-  text-overflow: ellipsis; /*does this work?*/
   color: #999;
 }
+
+/*Change the colour of the user list to orange when a mouse hovers over a person*/
 .container .left .people .person.active, .container .left .people .person:hover {
   margin-top: -1px;
   margin-left: -1px;
@@ -184,19 +188,24 @@ body {
   width: calc(100% + 2px);
   padding-left: calc(10% + 1px);
 }
+
 .container .left .people .person.active span, .container .left .people .person:hover span {
   color: #fff;
   background: transparent;
 }
+
 .container .left .people .person.active:after, .container .left .people .person:hover:after {
   display: none;
 }
+
+/*Right side of container has chat box implementations*/
 .container .right {
   position: relative;
   float: left;
   width: 65%;
   height: 100%;
 }
+
 .container .right .top {
   width: 100%;
   height: 47px;
@@ -212,6 +221,8 @@ body {
   font-family: 'Source Sans Pro', sans-serif;
   font-weight: 600;
 }
+
+/*Styling the actual chat box. Key factors: overflow-y (can be scrolled) but not overflow-x (force chat to wrap)*/
 .container .right .chat {
   overflow-y: scroll;
   overflow-x: hidden;
@@ -280,6 +291,7 @@ body {
   font-weight: bold;
 }
 
+/*Style the bottom bar's positioning*/
 .container .right .write {
   position: absolute;
   bottom: 0px;
@@ -288,6 +300,8 @@ body {
   border: 1px solid #e6e6e6;
   background-color: #f2f2f2;
 }
+
+/*Style the input box for chat*/
 .container .right .write input {
   font-size: 16px;
   float: left;
@@ -301,6 +315,8 @@ body {
   font-weight: 400;
 }
 
+/*Style the envelope graphic. Keep in mind this is NOT clickable (or appears not clickable).
+To change this, add back cursor: */
 .container .right .write .write-link.send{
   display: inline-block;
   width: 31px;
@@ -310,12 +326,15 @@ body {
   background-image: url("https://s30.postimg.org/nz9dho0pp/send.png");
   background-repeat: no-repeat;
   background-position: center;
-  cursor: pointer;
 }
 
+/*For markdown selection, just float the thing on the right hand side so it sits directly below the chat box.
+The best I can do given the time constraints, revise this later if possible.*/
 .container .right .write select {
   float: right;
 }
+
+/*Styling a chat bubble*/
 .container .right .bubble {
   font-size: 16px;
   display: inline-block;
@@ -325,6 +344,11 @@ body {
   vertical-align: top;
   border-radius: 5px;
 }
+
+/*Align the chat bubble left if the message was sent to me, else align right. Also make sent messages
+be grey and received messages orange (to stay congruent with colour scheme). Because of this, the text
+colour must also be switched between white and black respectively to maintain readability.*/
+
 .container .right .bubble.you {
   float: left;
   color: #1a1a1a;
@@ -332,6 +356,7 @@ body {
   -ms-flex-item-align: start;
       align-self: flex-start;
 }
+
 .container .right .bubble.me {
   float: right;
   color: #ffffff;
@@ -340,7 +365,7 @@ body {
       align-self: flex-end;
 }
 
-/*VIEWPROFILES/LOGS SEARCH BOX STYLING*/
+/*profile viewing and logs/search box styling*/
 .search input {
   outline: 0;
   background: #f2f2f2; /* slightly grey fields */
@@ -352,6 +377,7 @@ body {
   font-size: 12px;
 }
 
+/*Might need to change these elements to suit different browsers - test on Ubuntu Firefox.*/
 .search button {
   outline: 0;
   background: #f2f2f2; /*color of button*/
@@ -359,7 +385,7 @@ body {
   text-indent: -9999px;
   border-radius: 10px;
   margin-left: 15px;
-  background-image: url("http://www.dliflc.edu/wp-content/themes/DLIFLC/images/icon-find.png");
+  background-image: url("http://www.dliflc.edu/wp-content/themes/DLIFLC/images/icon-find.png"); /*some magnifying glass looking thing*/
   background-repeat: no-repeat;
   background-position: center;
   height: 36px;

@@ -1,7 +1,9 @@
+// This .js file serves the files page.
+
 $(document).ready(function () {
-    $('.left .person').mousedown(function(){ //on left click
-      var sentOrReceive = $(this).find('.name').text();
-      $('.right .top .name').html(sentOrReceive); //css value at top changes
+    $('.left .person').mousedown(function(){ //if a user clicks an option on the left side of the container box
+      var sentOrReceive = $(this).find('.name').text(); //store the HTML text in a variable
+      $('.right .top .name').html(sentOrReceive); //css value at top changes (received or sent messages)
       // now send an HTTP get request to call a python function that grabs DB data
       if (sentOrReceive === "Send a file") {
         $.ajax({

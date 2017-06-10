@@ -1,5 +1,6 @@
+/*For the message logs page*/
 $(document).ready(function () {
-    $('.left .person').mousedown(function(){ //on left click
+    $('.left .person').mousedown(function(){ //on left click on the left container pane
       var sentOrReceive = $(this).find('.name').text();
       $('.right .top .name').html(sentOrReceive); //css value at top changes
       // now send an HTTP get request to call a python function that grabs DB data

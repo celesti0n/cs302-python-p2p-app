@@ -16,8 +16,13 @@ from json import load
 from urllib2 import urlopen
 
 import cherrypy
-import encrypt
 from cherrypy.process.plugins import Monitor
+
+# below are helper .py files
+import encrypt
+import db_calls
+import time_formatting
+
 
 DB_STRING = "users.db"
 reload(sys)
@@ -48,7 +53,7 @@ def LimitReached():  # this function will return True if limit reached/user has 
     global api_calls
     api_calls = api_calls + 1
     print('Current calls:' + str(api_calls))
-    if (api_calls > 10):  # if 11 people have called my functions within 60 seconds
+    if (api_calls > 14):  # if 15 people have called my functions within 60 seconds
         print("Rate limit activated, a user was blocked from your API")
         return True  #  block the request and return Error 11: Blacklisted or Rate Limited (done in other funcs)
     else:
@@ -56,6 +61,8 @@ def LimitReached():  # this function will return True if limit reached/user has 
 
 class MainApp(object):
     logged_on = 0  # 0 = never tried to log on, 1 = success, 2 = tried and failed, 3 = success and logged out
+
+# The functions below are served directly as HTML. Replace has been called to add in important python-based output.
 
     @cherrypy.expose
     def index(self):
@@ -79,7 +86,7 @@ class MainApp(object):
         try:
             data = data.replace("USER_NAME", cherrypy.session.get('username'))
         except:
-            return "You are not logged in. Click " + "<a href='/'>here</a> to login"
+            return "You are not logged in. Click " + "<a href='/'>here</a> to login"  # in case the session had timed out
         data = data.replace("USERS_ONLINE", self.getList())
         data = data.replace("LIST_OF_TOTAL_USERS", self.listAllUsers())
         data = data.replace("RECEIVED_MESSAGE_LIST", self.displayReceivedMessage())
@@ -110,10 +117,6 @@ class MainApp(object):
             return "You are not logged in. Click " + "<a href='/'>here</a> to login"
         data = data.replace("USER_FILES", self.displayFile())
         data = data.replace("USERS_ONLINE", self.getList())
-        if (self.file_sent == 1):
-            data = data.replace("FILE_STATUS", "File successfully sent.")
-        else:
-            data = data.replace("FILE_STATUS", "")
         return data
 
     @cherrypy.expose
@@ -145,18 +148,17 @@ class MainApp(object):
         f = open("twoFA.html", "r")
         data = f.read()
         f.close()
-        data = data.replace("GAUTH_KEY",encrypt.secret)
         return data
 
     @cherrypy.expose
     def validate2FA(self, code):
-        # edge case if MSB of code is 0, get_totp_token would return a 5 digit no.
+        # edge case if MSB of code is 0, get_totp_token would return a 5 digit number
         if code[0] == '0':
-            code = code[1:]  # new code doesnt include MSB
+            code = code[1:]  # new code to validate doesnt include MSB
 
         if (int(code) == encrypt.get_totp_token(encrypt.secret)):
             print("twoFA successfully authenticated")
-            with sqlite3.connect(DB_STRING) as c:
+            with sqlite3.connect(DB_STRING) as c:  # table also in re-calling /report in another thread
                 c.execute("INSERT INTO user_credentials(username, password, location, ip, port) VALUES (?,?,?,?,?)",
                 [cherrypy.session.get('username'), cherrypy.session.get('password'), cherrypy.session.get('location'),
                 cherrypy.session.get('ip'),cherrypy.session.get('port')])
@@ -167,8 +169,7 @@ class MainApp(object):
             raise cherrypy.HTTPRedirect('/')
 
     @cherrypy.expose
-    def report(self, username, password, location='2', ip='180.148.100.178', port=listen_port):  # change ip = back to listen_ip
-        # print(ip)
+    def report(self, username, password, location='2', ip='180.148.100.178', port=listen_port):  # TODO: change ip = back to listen_ip
         hashedPassword = encrypt.hash(password)  # call hash function for SHA256 encryption
         auth = self.authoriseUserLogin(username, hashedPassword, location, ip, port)
         error_code,error_message = auth.split(",")
@@ -194,76 +195,52 @@ class MainApp(object):
             self.logged_on = 2
             raise cherrypy.HTTPRedirect('/')  # set flag to change /index function
 
-    def reportThreaded(self):
+    def reportThreaded(self):  # take user credentials data and /report with that
         c = sqlite3.connect(DB_STRING)
         cur = c.cursor()
         cur.execute("SELECT username, password, location, ip, port FROM user_credentials")
         credentials = cur.fetchone()
         auth = self.authoriseUserLogin(credentials[0],credentials[1],credentials[2],credentials[3],credentials[4])
         print("/report called!")
-        print(auth)
         return auth
 
+    def authoriseUserLogin(self,username, password, location, ip, port):
+        params = {'username':username, 'password':password, 'location':location, 'ip':ip, 'port':port}
+        full_url = 'http://cs302.pythonanywhere.com/report?' + urllib.urlencode(params)  # converts to format &a=b&c=d...
+        return urllib2.urlopen(full_url).read()
+
     @cherrypy.expose
-    def blackList(self, choice, username):
-        if choice == 'Block':  # if user chose Block from dropdown
-            c = sqlite3.connect(DB_STRING) # to find the IP address of the blocked user, search the
+    def blackList(self, choice, username):  # this function is called if the blacklist form on home.html is called
+        if choice == 'Block':  # if user chose Block from dropdown on home.html
+            c = sqlite3.connect(DB_STRING)
             cur = c.cursor()
             cur.execute("SELECT ip FROM user_string WHERE username=?", [username])
             creds = cur.fetchone()
-            if not creds:  # couldn't found username's IP address
+            if not creds:  # couldn't find username's IP address in user string
                 return 'IP not found, user may not be online. Click ' + '<a href="/home">here</a> to go back.'
             else:
-                with sqlite3.connect(DB_STRING) as c:
+                with sqlite3.connect(DB_STRING) as c:  # insert the name into blacklist
                     c.execute("INSERT INTO blacklist(username, ip) VALUES (?,?)",
                     [username,creds[0]])
         else: # Unblock was chosen
             with sqlite3.connect(DB_STRING) as c:
-                c.execute("DELETE FROM blacklist WHERE username=?", [username])
+                c.execute("DELETE FROM blacklist WHERE username=?", [username])  # delete the name from blacklist
         raise cherrypy.HTTPRedirect('/home')  # refresh the page
 
 
     @cherrypy.expose
     def listAllUsers(self):
-        with sqlite3.connect(DB_STRING) as c:
-            c.execute("DELETE FROM total_users")  # in order to avoid dupes in table
         url = 'http://cs302.pythonanywhere.com/listUsers'
-        api_call = urllib2.urlopen(url).read()
-        total_users_list = api_call.split(",")
-        total_users = len(total_users_list)
+        api_call = urllib2.urlopen(url).read()  # call login server API and store the result
+        total_users_list = api_call.split(",")  # create a list by splitting based on comma, as based on string format of output
         total_users_string = ''
-        for i in range(0, total_users):
-            if total_users_list[i] != cherrypy.session.get('username'):  # don't add the current user to list of possible contacts
-                with sqlite3.connect(DB_STRING) as c:
-                    c.execute("INSERT INTO total_users(username) VALUES (?)",
-                    [total_users_list[i]])
+        for i in range(0, len(total_users_list)):
+            if total_users_list[i] != cherrypy.session.get('username'):  # don't add the current user to list of possible msg-ers
                 total_users_string += '<li class="person">' + \
-                '<img src="' + self.getProfilePic(total_users_list[i]) + '"/>' + '<span class="name">' + \
+                '<img src="' + db_calls.getProfilePic(total_users_list[i]) + '"/>' + '<span class="name">' + \
                 str(total_users_list[i]) + '</span>' + \
-                '<span class="preview">' + self.checkOnline(total_users_list[i]) + '</span></li>'
+                '<span class="preview">' + db_calls.checkOnline(total_users_list[i]) + '</span></li>'
         return total_users_string
-
-    def getProfilePic(self, user):
-        c = sqlite3.connect(DB_STRING)
-        cur = c.cursor()
-        cur.execute("SELECT picture FROM profiles WHERE profile_username=?",
-                    [user])
-        pic = cur.fetchone()
-        if not pic:  # no pic found
-            return 'http://imgur.com/oymng0G.jpg'  # return default pic, fort logo
-        else:
-            return ''.join(pic)  # tuple to string
-
-    def checkOnline(self, user):
-        c = sqlite3.connect(DB_STRING)
-        cur = c.cursor()
-        cur.execute("SELECT lastlogin FROM user_string WHERE username=?", [user])
-        credentials = cur.fetchone()
-        if not credentials:  # empty found
-            return ''
-        else:
-            return 'Online now!'
-
 
     @cherrypy.expose
     @cherrypy.tools.json_in()
@@ -316,7 +293,7 @@ class MainApp(object):
                         [username, json.load(response)]) # store the decoded JSON response
                     return response
                 except:
-                    return self.checkOnline(username)
+                    return db_calls.checkOnline(username)
         except:
             return "Error grabbing status data"
 
@@ -334,7 +311,7 @@ class MainApp(object):
             conversation += '<div class = "bubble you">'
             conversation += 'Remember to wait at least 10 seconds for your message to appear after sending.' + '</div>'
             conversation += '<div class = "bubble you">'
-            conversation += 'You can choose to send your message <em>in </em><code>markdown </code>too.' + '</div>'
+            conversation += 'You can choose to send your message in <code>markdown </code>too.' + '</div>'
             return str(conversation)
         else:
             # get conversation between somebody and the logged in user.
@@ -383,7 +360,7 @@ class MainApp(object):
                     with sqlite3.connect(DB_STRING) as c:
                         c.execute("INSERT INTO user_string(username, location, ip, port, lastlogin) VALUES (?,?,?,?,?)",
                         [username, location, ip, port, epoch_time])
-            return "There are " + str(users_online) + " users online."
+            return "There are " + str(users_online) + " users online."  # return some useful information on UI
         else:
             return api_call
 
@@ -392,20 +369,20 @@ class MainApp(object):
         c = sqlite3.connect(DB_STRING)
         cur = c.cursor()
         cur.execute("SELECT username, password FROM user_credentials WHERE username=?",
-        [cherrypy.session.get('username')])
+        [cherrypy.session.get('username')])  # use the user_credentials table
         user_cred = cur.fetchone()
         params = {'username':user_cred[0], 'password':user_cred[1]}
-        full_url = 'http://cs302.pythonanywhere.com/logoff?' + urllib.urlencode(params)
+        full_url = 'http://cs302.pythonanywhere.com/logoff?' + urllib.urlencode(params)  # call login server function
         api_call = urllib2.urlopen(full_url).read()
         error_code = api_call[0]
         if (error_code == '0'):
-            cherrypy.lib.sessions.expire()
-            self.logged_on = 3
+            cherrypy.lib.sessions.expire()  # on success, expire the sessions
+            self.logged_on = 3  # prompt to get the right HTML output on logout
             raise cherrypy.HTTPRedirect('/')
         else:
             return api_call
 
-    def logoffForced(self):
+    def logoffForced(self):  # calls on 'application exit' - either server stopping or crashing. see __main__ for use
         c = sqlite3.connect(DB_STRING)
         cur = c.cursor()
         cur.execute("SELECT username, password FROM user_credentials")
@@ -418,7 +395,7 @@ class MainApp(object):
                 return
 
     @cherrypy.expose
-    def ping(self):  # for other people to check me out, implement sender arg later
+    def ping(self, sender=None):  # Default sender=None so people who don't follow protocol can call
         print("SOMEBODY PINGED YOU!")
         return '0'
 
@@ -430,10 +407,10 @@ class MainApp(object):
 
     @cherrypy.expose
     @cherrypy.tools.json_in()  # according to docs, all json input parameters stored in cherrypy.request.json
-    def receiveMessage(self):
+    def receiveMessage(self):  # Note: this function only stores stuff in our tables. Displaying messages is in DisplayMessage
         if LimitReached():  # implements rate limiting to regulate API calls, if true - block user from accessing info
             return 'Error 11: Blacklisted or Rate Limited'
-        else:  # continue on with life
+        else:
             try:  # try to receive message with markdown encoding arg
                 with sqlite3.connect(DB_STRING) as c:
                     c.execute("INSERT INTO msg(sender, destination, msg, stamp, markdown) VALUES (?,?,?,?,?)",
@@ -450,7 +427,7 @@ class MainApp(object):
                 return '0'
 
     @cherrypy.expose
-    def sendMessage(self, destination, message, markdown):
+    def sendMessage(self, destination, message, markdown):  # this function calls other people's receiveMessage
         # look up the 'destination' user in database and retrieve his corresponding ip address and port
         c = sqlite3.connect(DB_STRING)
         cur = c.cursor()
@@ -464,14 +441,14 @@ class MainApp(object):
             try:  # try to send them a message with markdown argument
                 output_dict = {"sender": cherrypy.session.get('username'), "message": message,
                 "destination": destination, "stamp": int(time.time()), "markdown": markdown}
-                postdata = json.dumps(output_dict)
+                postdata = json.dumps(output_dict) # encode to JSON
                 req = urllib2.Request("http://" + ip + ":" + port + "/receiveMessage",
                                      postdata, {'Content-Type': 'application/json'})
-                try:
+                try:  # just in case they give an abnormal response, do a try except
                     response = urllib2.urlopen(req).read()
-                    if (response.find('0') != -1):  # successful
+                    if (response.find('0') != -1):  # successfully sent message if '0' is found in return
                         print "Markdown arg message sent to client: " + destination
-                        with sqlite3.connect(DB_STRING) as c:
+                        with sqlite3.connect(DB_STRING) as c:  # place our sent message in our table too
                             c.execute("INSERT INTO msg(sender, destination, msg, stamp, markdown) VALUES (?,?,?,?,?)",
                             [cherrypy.session.get('username'), destination, message, int(time.time()), int(markdown)])
                     else:
@@ -500,9 +477,10 @@ class MainApp(object):
 
     @cherrypy.expose
     @cherrypy.tools.json_in()  # profile_username and sender input is stored in cherrypy.request.json
-    @cherrypy.tools.json_out(content_type='application/json')  # allows the output to be of type application/json instead of text/html
-    def getProfile(self):  # this function is called by OTHER people to grab my data. use displayProfile to see my own, grabProfile to get others
-        if LimitReached():
+    @cherrypy.tools.json_out(content_type='application/json')  # allows the output to be of type application/json
+    def getProfile(self):  # This function called by OTHER people to grab my data only.
+    # Use displayProfile to see implementation of displaying profile data, and grabProfile on how to call other's /getProfile
+        if LimitReached():  # with every function called by others, check if rate limiting should kick in to stop DDOS's
             return 'Error 11: Blacklisted or Rate Limited'
         else:
             try:
@@ -521,49 +499,48 @@ class MainApp(object):
                 return "4: Database Error"
 
     @cherrypy.expose
-    def grabProfile(self, profile_username, sender=''):  # this function is called by me
-        try:  # first try to fetch data from the local database, if we have something
-            return self.displayProfile(profile_username) # REMOVE THIS LATER... WE WANT THE LATEST PROFILE INFO!!
-        except:  # if we don't, then try to call their /getProfile to store, then do step 1
-            c = sqlite3.connect(DB_STRING)
-            cur = c.cursor()
-            cur.execute("SELECT ip, port FROM user_string WHERE username=?",
-                        [profile_username])
-            values = cur.fetchone()
-            if not values:
-                return '3: Client Currently Unavailable'
-            else:
-                ip = values[0]
-                port = values[1]
-                profile_dict = {"profile_username": profile_username, "sender": cherrypy.session.get('username')}
-                params = json.dumps(profile_dict)
-                req = urllib2.Request("http://" + ip + ":" + port + "/getProfile",
-                                     params, {'Content-Type': 'application/json'})
-                response = urllib2.urlopen(req).read()
-                try:  # if response is not valid JSON, json.loads should throw a ValueError
-                    print "Profile details grabbed: " + profile_username
-                    c = sqlite3.connect(DB_STRING)
-                    cur = c.cursor()
-                    cur.execute("SELECT profile_username FROM profiles WHERE profile_username=?",
-                                [profile_username])
-                    values = cur.fetchone()  # check if profile grab target is already in database
-                    if not values:  # if search is empty, insert their details into table
-                        with sqlite3.connect(DB_STRING) as c:
-                            # decode response
-                            response_str = json.loads(response)
-                            c.execute("INSERT INTO profiles(profile_username, fullname, position, description, location, picture) VALUES (?,?,?,?,?,?)",
-                            (profile_username, response_str["fullname"], response_str["position"], response_str["description"],
-                            response_str["location"], response_str["picture"]))
-                        return self.displayProfile(profile_username)
-                    else:  # they are already in the table, no need to duplicate insert
-                        return self.displayProfile(profile_username)
-                except ValueError:
-                    print "An error occurred. The target user is not returning a JSON encoding their profile info."
-                    return response
+    def grabProfile(self, profile_username, sender=''):  # this function is called by me (thus no JSON)
+    # however a JSON argument will (should) be returned so decoding it before storing in DB is required.
+        c = sqlite3.connect(DB_STRING)
+        cur = c.cursor()
+        cur.execute("SELECT ip, port FROM user_string WHERE username=?",
+                    [profile_username])
+        values = cur.fetchone()
+        if not values:  # if search for IP/port comes up empty, target of grab is probably not online
+            return '3: Client Currently Unavailable'
+        else:
+            ip = values[0]
+            port = values[1]
+            profile_dict = {"profile_username": profile_username, "sender": cherrypy.session.get('username')}
+            params = json.dumps(profile_dict)
+            req = urllib2.Request("http://" + ip + ":" + port + "/getProfile",
+                                 params, {'Content-Type': 'application/json'})
+            response = urllib2.urlopen(req).read()
+            try:  # if response is not valid JSON, json.loads should throw a ValueError
+                print "Profile details grabbed: " + profile_username
+                c = sqlite3.connect(DB_STRING)
+                cur = c.cursor()
+                cur.execute("SELECT profile_username FROM profiles WHERE profile_username=?",
+                            [profile_username])
+                values = cur.fetchone()  # check if profile grab target is already in database
+                if not values:  # if search is empty, insert their details into table
+                    with sqlite3.connect(DB_STRING) as c:
+                        # decode response
+                        response_str = json.loads(response)
+                        c.execute("INSERT INTO profiles(profile_username, fullname, position, description, \
+                        location, picture) VALUES (?,?,?,?,?,?)",
+                        (profile_username, response_str["fullname"], response_str["position"], response_str["description"],
+                        response_str["location"], response_str["picture"]))
+                    return self.displayProfile(profile_username)
+                else:  # they are already in the table, no need to duplicate insert
+                    return self.displayProfile(profile_username)
+            except ValueError:
+                print "An error occurred. The target user is not returning a JSON encoding their profile info."
+                return response
 
     @cherrypy.expose
     def displayProfile(self, user='entry'):
-        if (user == 'entry'):
+        if (user == 'entry'):  # when page first loads, show the personal profile of the user
             c = sqlite3.connect(DB_STRING)
             cur = c.cursor()
             cur2 = c.cursor()
@@ -578,6 +555,7 @@ class MainApp(object):
             cur2.execute("SELECT status FROM user_status WHERE profile_username=?", [cherrypy.session.get('username')])
             status_info = cur2.fetchone()
             status = status_info[0]
+            # Also include the edit profile settings in this window
             return '<img src="' + picture + '" height="300" width="300">' + '<br />' + "<b>Full Name: </b> " + str(fullname) + \
             "<b>Position: </b>" + str(position) + "<b>Description: </b>" + str(description) + "<b>Location: </b>" + str(location) + \
             '<br /><b>Status:</b>' + str(status) + """<br /><b>Edit your profile</b><br /><div class="profile-form">
@@ -613,13 +591,13 @@ class MainApp(object):
                 '<div class = "bubble you">' + '<b>Full Name:</b> ' + str(fullname) + '<br /></div>' + \
                 '<div class = "bubble you">' + '<b>Position:</b> ' + str(position) + '<br />' + \
                 '<b>Description:</b> ' + str(description) + '<br />' + "<b>Location:</b> " + str(location) + \
-                "<br /></div>Status: "
-                # + self.grabStatus(user)
+                '<br /></div>'
             except:
                 return '<div class="bubble you">This profile has not published any information yet.</div>'
 
     @cherrypy.expose
     def updateProfile(self, fullname, position, description, location, picture, status):
+        # is called when displayProfile's form is submitted
         c = sqlite3.connect(DB_STRING)
         cur = c.cursor()
         cur.execute("""
@@ -633,7 +611,7 @@ class MainApp(object):
     @cherrypy.tools.json_in()  # takes in sender, destination, file, filename, content_type, stamp
     def receiveFile(self):
         try:
-            with sqlite3.connect(DB_STRING) as c:
+            with sqlite3.connect(DB_STRING) as c:  # insert everything into my table. It is sender's job to base64
                 c.execute("INSERT INTO files(sender, destination, file, filename, content_type, stamp) VALUES (?,?,?,?,?,?)",
                 [cherrypy.request.json['sender'], cherrypy.request.json['destination'], cherrypy.request.json['file'],
                 cherrypy.request.json['filename'], cherrypy.request.json['content_type'], cherrypy.request.json['stamp']])
@@ -642,42 +620,33 @@ class MainApp(object):
         except:
             return 'An error occurred'
 
-    file_sent = 0
-
     @cherrypy.expose
     def sendFile(self, destination, file):  # get filename and content_type from uploaded file
-        #get ip and port of target user
         try:
             c = sqlite3.connect(DB_STRING)
             cur = c.cursor()
             cur.execute("SELECT ip, port FROM user_string WHERE username=?",[destination])
-            values_tuple = cur.fetchone()
-            ip = values_tuple[0]
-            port = values_tuple[1]
+            values = cur.fetchone() # get ip and port of target user
+            ip = values[0]
+            port = values[1]
         except:
             return "3: Client Currently Unavailable"
-        # check if their listAPI contains receiveFile, or the function won't work
-        # if (self.checkListAPI(destination, 'receiveFile')): # if they do have receiveFile
-        file_dict = {"sender": cherrypy.session.get('username'), "destination": destination, "file": base64.b64encode(file.file.read()),
-                    "filename": str(file.filename), "content_type": str(file.content_type), "stamp": int(time.time())}
-        print(file_dict)
+
+        file_dict = {"sender": cherrypy.session.get('username'), "destination": destination,
+        "file": base64.b64encode(file.file.read()), "filename": str(file.filename),
+        "content_type": str(file.content_type), "stamp": int(time.time())}
         params = json.dumps(file_dict)
         req = urllib2.Request("http://" + ip + ":" + port + "/receiveFile",
               params, {'Content-Type': 'application/json'})
         response = urllib2.urlopen(req).read()
         if (response.find('0') != -1):  # successful
             print ("Sent file to " + str(destination))
-            self.file_sent = 1
             raise cherrypy.HTTPRedirect("/files")
-
         else:
-            self.file_sent = 0
             return 'The user has not reported that the file send was successful.'
-        # else: # no receiveFile
-        #     return 'This user has not implemented receiveFile yet'
 
     @cherrypy.expose
-    def displayFile(self):
+    def displayFile(self):  # display contents of database - 'embedded media player' here
         try:
             c = sqlite3.connect(DB_STRING)
             cur = c.cursor()
@@ -685,29 +654,28 @@ class MainApp(object):
             [cherrypy.session.get('username')])
             file_list = cur.fetchall()
             files = ''
-
             for i in range(0, len(file_list)):
-                # if file has mimetype starting with 'image/', use <img> tag to display
-                if ("image/" in str(file_list[i][3])):
+                # The following code helps format data in our files table into HTML tags for embedded media display
+                if ("image/" in str(file_list[i][3])): # if file has mimetype starting with 'image/'...
                     files += '<div class="bubble you">' + 'From: ' + '<b>' + str(file_list[i][0]) + '</b><br />' +  \
                     '<br /><img alt="image" height="120" width="120" src="data:' + str(file_list[i][3]) + ';base64,' + str(file_list[i][1]) + '"><br />' + \
                     'Name: ' + str(file_list[i][2]) + '<br />' + 'Type: ' + str(file_list[i][3]) + '<br />' + \
-                    'Time sent: ' + self.epochFormat(file_list[i][4]) + '<br /><br /></div>'
-                elif ("video/" in str(file_list[i][3])):
+                    'Time sent: ' + time_formatting.epochFormat(file_list[i][4]) + '<br /><br /></div>'
+                elif ("video/" in str(file_list[i][3])):  # if file has mimetype starting with 'video/'
                     files += '<div class="bubble you">' + 'From: ' + '<b>' + str(file_list[i][0]) + '</b><br />' + \
                     '<br /><video height="300" width="300" controls><source type="' + str(file_list[i][3]) + '"src="data:' + str(file_list[i][3]) + \
                     ';base64,' + str(file_list[i][1]) + '"></video>' + '<br /> Name: ' + str(file_list[i][2]) + '<br /> Type: ' + \
-                    str(file_list[i][3]) + '<br /> Time sent: ' + self.epochFormat(file_list[i][4]) + '<br /><br /></div>'
-                elif ("audio/" in str(file_list[i][3])):
+                    str(file_list[i][3]) + '<br /> Time sent: ' + time_formatting.epochFormat(file_list[i][4]) + '<br /><br /></div>'
+                elif ("audio/" in str(file_list[i][3])):  # if file has mimetype starting with 'audio/'
                     files += '<div class="bubble you">' + 'From: ' + '<b>' + str(file_list[i][0]) + '</b><br />' + \
                     '<br /><audio controls src="data:' + str(file_list[i][3]) + ';base64,' + str(file_list[i][1]) + '"></audio>' + \
                     '<br />Name: ' + str(file_list[i][2]) + '<br />' + 'Type: ' + str(file_list[i][3]) + '<br />' + \
-                    'Time sent: ' + self.epochFormat(file_list[i][4]) + '<br /><br /></div>'
+                    'Time sent: ' + time_formatting.epochFormat(file_list[i][4]) + '<br /><br /></div>'
                 else:  # provide a download link (to say, PDFs)
                     files += '<div class="bubble you">' + 'From: ' + '<b>' + str(file_list[i][0]) + '</b><br />' + \
                     '<br /><a download href="data:' + str(file_list[i][3]) + ';base64,' + str(file_list[i][1]) + '">Download ' + \
                     str(file_list[i][2]) + '</a>' + '<br />Name: ' + str(file_list[i][2]) + '<br />' + 'Type: ' + \
-                    str(file_list[i][3]) + '<br />' + 'Time sent: ' + self.epochFormat(file_list[i][4]) + '<br /><br /></div>'
+                    str(file_list[i][3]) + '<br />' + 'Time sent: ' + time_formatting.epochFormat(file_list[i][4]) + '<br /><br /></div>'
             if not files:  # no files were found
                 return 'No files were found.'
             return files
@@ -715,7 +683,7 @@ class MainApp(object):
             return 'An error occurred when attempting to display files'
 
     @cherrypy.expose
-    def displayFileForm(self):
+    def displayFileForm(self):  # created so sending files could run through an AJAX request. Links to /sendFile
         return """<br /><br /><br /><br />
             <br /><br /><br /><br /><div class="form">
             <form class="login-form" method = "post" action = "/sendFile/" enctype="multipart/form-data">
@@ -725,7 +693,7 @@ class MainApp(object):
             </form>"""
 
     @cherrypy.expose
-    def displayReceivedMessage(self):
+    def displayReceivedMessage(self):  # This is called in message logs to display ALL received messages, with timestamps
         c = sqlite3.connect(DB_STRING)
         cur = c.cursor()
         cur.execute("SELECT sender, msg, stamp FROM msg WHERE destination=?",
@@ -733,27 +701,12 @@ class MainApp(object):
         msg_list = cur.fetchall()
         messages = ''
         for i in range(0, len(msg_list)):
-            messages += '<i><b>' + str(msg_list[i][0]) + '</b>' + " [" + self.epochFormat(msg_list[i][2]) + "]" + \
-            " (" + str(self.timeSinceMessage(msg_list[i][2])) + ")" + " messaged you: " + str(msg_list[i][1]) + "<br /></i>"
+            messages += '<i><b>' + str(msg_list[i][0]) + '</b>' + " [" + time_formatting.epochFormat(msg_list[i][2]) + "]" + \
+            " (" + str(time_formatting.timeSinceMessage(msg_list[i][2])) + ")" + " messaged you: " + str(msg_list[i][1]) + "<br /></i>"
         return messages
 
     @cherrypy.expose
-    def checkListAPI(self, username, string):
-        # this function calls the user's /listAPI looking for the string.
-        # the function returns True if the string is found, and False if the string is not found.
-        c = sqlite3.connect(DB_STRING)
-        cur = c.cursor()
-        cur.execute("SELECT ip, port FROM user_string WHERE username=?",[username])
-        values_tuple = cur.fetchone()
-        api_call = 'http://' + values_tuple[0] + ':' + values_tuple[1] + '/listAPI'
-        response = urllib2.urlopen(api_call).read()
-        if response.find(string) != -1:  # successful in finding string
-            return True
-        else:
-            return False
-
-    @cherrypy.expose
-    def displaySentMessage(self):
+    def displaySentMessage(self):  # Called in message logs page to display ALL sent messages, with timestamps
         c = sqlite3.connect(DB_STRING)
         cur = c.cursor()
         cur.execute("SELECT destination, msg, stamp FROM msg WHERE sender=?",
@@ -761,12 +714,16 @@ class MainApp(object):
         msg_list = cur.fetchall()
         messages = ''
         for i in range(0, len(msg_list)):
-            messages += '<i><b>You sent ' + str(msg_list[i][0]) + ':</b>' + " [" + self.epochFormat(msg_list[i][2]) + "]"\
-            " (" + str(self.timeSinceMessage(msg_list[i][2])) + ")" + ": " + str(msg_list[i][1]) + "<br /></i>"
+            messages += '<i><b>You sent ' + str(msg_list[i][0]) + ':</b>' + " [" + time_formatting.epochFormat(msg_list[i][2]) + "]"\
+            " (" + str(time_formatting.timeSinceMessage(msg_list[i][2])) + ")" + ": " + str(msg_list[i][1]) + "<br /></i>"
         return messages
 
     @cherrypy.expose
     def searchMessage(self, msg_phrase):
+        # Is called upon search query in message logs. Returns all messages (sent or received) that contains the search query.
+        # Note that it is case insensitive, and also does not require an exact word match; a result matches even if the query
+        # is part of a larger word. This is probably most practical for message searching purposes
+
         c = sqlite3.connect(DB_STRING)
         cur = c.cursor()
         cur.execute("SELECT sender, destination, msg, stamp FROM msg WHERE msg LIKE ('%' || ? || '%')", [msg_phrase])
@@ -774,48 +731,15 @@ class MainApp(object):
         messages = ''
         for i in range(0, len(msg_list)):
             if msg_list[i][0] == cherrypy.session.get('username'):  # if the msg is a sent message
-                messages += '<i><b>You sent ' + str(msg_list[i][1]) + ':</b>' + " [" + self.epochFormat(msg_list[i][3]) + "]"\
-                " (" + str(self.timeSinceMessage(msg_list[i][3])) + ")" + ": " + str(msg_list[i][2]) + "<br /></i>"
+                messages += '<i><b>You sent ' + str(msg_list[i][1]) + ':</b>' + " [" + time_formatting.epochFormat(msg_list[i][3]) + "]"\
+                " (" + str(time_formatting.timeSinceMessage(msg_list[i][3])) + ")" + ": " + str(msg_list[i][2]) + "<br /></i>"
             else:  # msg is a received message
-                messages += '<i><b>' + str(msg_list[i][0]) + '</b>' + " [" + self.epochFormat(msg_list[i][3]) + "]" + \
-                " (" + str(self.timeSinceMessage(msg_list[i][3])) + ")" + " messaged you: " + str(msg_list[i][2]) + "<br /></i>"
+                messages += '<i><b>' + str(msg_list[i][0]) + '</b>' + " [" + time_formatting.epochFormat(msg_list[i][3]) + "]" + \
+                " (" + str(time_formatting.timeSinceMessage(msg_list[i][3])) + ")" + " messaged you: " + str(msg_list[i][2]) + "<br /></i>"
         if not messages:
             return 'No messages found for the term: ' + msg_phrase
         else:
             return messages
-
-
-    def jsonEncodeMessage(self, sender, message, destination, stamp, markdown):
-
-        return data
-
-    def epochFormat(self, timeStamp):
-        return datetime.datetime.fromtimestamp(timeStamp).strftime('%Y-%m-%d %H:%M:%S').encode('ascii', 'ignore')
-
-    def timeSinceMessage(self, timeStamp):
-        timeSince = time.time() - timeStamp
-        units = ''
-        if timeSince < 60:
-            timeSince = int(round(timeSince))
-            units = ' second(s) ago'
-        elif timeSince >= 60 and timeSince < 3600:
-            timeSince = int(round(timeSince / 60))
-            units = ' minute(s) ago'
-        elif timeSince >= 3600 and timeSince < 86400:
-            timeSince = int(round(timeSince / 3600))
-            units = ' hour(s) ago'
-        elif timeSince >= 86400 and timeSince < 604800:
-            timeSince = int(round(timeSince / 86400))
-            units = ' day(s) ago'
-        else:
-            return "A very long time ago"
-        return str(timeSince) + units
-
-    def authoriseUserLogin(self,username, password, location, ip, port):
-        params = {'username':username, 'password':password, 'location':location, 'ip':ip, 'port':port}
-        full_url = 'http://cs302.pythonanywhere.com/report?' + urllib.urlencode(params)  # converts to format &a=b&c=d...
-        return urllib2.urlopen(full_url).read()
-
 
 conf = {
         '/': {
@@ -843,4 +767,4 @@ if __name__ == '__main__':
         cherrypy.engine.start()
         cherrypy.engine.block()
     finally:  # on application exit
-        MainApp().logoffForced()
+        MainApp().logoffForced()  # uses user_credentials table to forcefully log off user
