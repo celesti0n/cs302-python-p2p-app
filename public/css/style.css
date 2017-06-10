@@ -93,7 +93,7 @@ body {
   position: relative;
   left: 50%;
   width: 1000px;
-  height: 900px;
+  height: 1200px;
   -webkit-transform: translate(-50%, 0);
           transform: translate(-50%, 0);
 }
@@ -128,7 +128,7 @@ body {
   border-right: 1px solid #e6e6e6;
   border-left: 1px solid #e6e6e6;
   width: calc(100% + 2px);
-  height: 559px; /*why css why*/
+  height: 779px; /*why css why*/
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -231,12 +231,55 @@ body {
       -ms-flex-direction: column;
           flex-direction: column;
 }
+/*Potential styling for markdown formatted messages in the chat box, sourced from various w3schools articles*/
 .chat b {
   font-weight:bold;
 }
 .chat i {
   font-size: 12px;
 }
+.chat em {
+  font-style: italic;
+}
+
+.chat strong {
+  font-weight: 700;
+}
+
+.chat code {
+  font-family: monospace;
+}
+
+.chat ol {
+  display: block;
+  list-style-type: decimal;
+  margin-top: 1em;
+  margin-bottom: 1em;
+  margin-left: 0;
+  margin-right: 0;
+  padding-left: 40px;
+}
+
+.chat h1 {
+  display: block;
+  font-size: 2em;
+  margin-top: 0.67em;
+  margin-bottom: 0.67em;
+  margin-left: 0;
+  margin-right: 0;
+  font-weight: bold;
+}
+
+.chat h2 {
+  display: block;
+  font-size: 1.5em;
+  margin-top: 0.83em;
+  margin-bottom: 0.83em;
+  margin-left: 0;
+  margin-right: 0;
+  font-weight: bold;
+}
+
 .container .right .write {
   position: absolute;
   bottom: 0px;

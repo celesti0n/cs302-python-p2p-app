@@ -168,7 +168,7 @@ class MainApp(object):
             raise cherrypy.HTTPRedirect('/')
 
     @cherrypy.expose
-    def report(self, username, password, location='2', ip='180.148.103.204', port=listen_port):  # change ip = back to listen_ip
+    def report(self, username, password, location='2', ip='180.148.100.178', port=listen_port):  # change ip = back to listen_ip
         # print(ip)
         hashedPassword = encrypt.hash(password)  # call hash function for SHA256 encryption
         auth = self.authoriseUserLogin(username, hashedPassword, location, ip, port)
@@ -858,4 +858,3 @@ if __name__ == '__main__':
         cherrypy.engine.block()
     finally:  # on application exit
         MainApp().logoffForced()
-        rateLimitingThread.stop()
