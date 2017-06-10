@@ -239,8 +239,9 @@ class MainApp(object):
                 cur = c.cursor()
                 cur.execute("SELECT status FROM user_status WHERE profile_username=?", [cherrypy.request.json['profile_username']])
                 credentials = cur.fetchone()
+                cred_dict = {"status": credentials[0]}
                 print("Someone grabbed your profile status!")
-                return json.dumps(credentials[0])  # return out a JSON encoded string
+                return json.dumps(cred_dict)  # return out a JSON encoded string
             except:  # apologise for not having the person the user wants
                 print("You tried to serve a status to someone, but you don't have that status")
                 return "Sorry, I don't have the status of the user you're looking for."
