@@ -89,21 +89,7 @@ class MainApp(object):
             return "You are not logged in. Click " + "<a href='/'>here</a> to login"  # in case the session had timed out
         data = data.replace("USERS_ONLINE", self.getList())
         data = data.replace("LIST_OF_TOTAL_USERS", self.listAllUsers())
-        data = data.replace("RECEIVED_MESSAGE_LIST", self.displayReceivedMessage())
-        data = data.replace("SENT_MESSAGE_LIST", self.displaySentMessage())
         data = data.replace("PLACEHOLDER", self.getChatConvo())
-        return data
-
-    @cherrypy.expose
-    def myProfile(self):
-        f = open("myProfile.html", "r")
-        data = f.read()
-        f.close()
-        try:
-            data = data.replace("USER_NAME", cherrypy.session.get('username'))
-        except:
-            return "You are not logged in. Click " + "<a href='/'>here</a> to login"
-        data = data.replace("PROFILE_DETAILS", self.displayProfile())
         return data
 
     @cherrypy.expose
