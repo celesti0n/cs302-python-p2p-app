@@ -303,7 +303,6 @@ body {
 
 .container .right .write .write-link.send{
   display: inline-block;
-  float: left;
   width: 31px;
   height: 40px;
   border: 0;
@@ -312,6 +311,10 @@ body {
   background-repeat: no-repeat;
   background-position: center;
   cursor: pointer;
+}
+
+.container .right .write select {
+  float: right;
 }
 .container .right .bubble {
   font-size: 16px;

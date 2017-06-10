@@ -32,7 +32,12 @@
               <form class='message-form' method = "post" action = "/sendMessage/">
               <input type="text" placeholder = "enter your message..." name = "message"/>
               <input type="hidden" value = "$('.right .top').find('.name').text();" name="destination" />
-              <button type="submit" class="write-link send"></a></form>
+              <select name = "markdown">
+                  <option value="0">Non-markdown</option>
+                  <option value="1">Markdown</option>
+              </select></form>
+              <button type="submit" class="write-link send">
+
           </div>
             <div class="top"><span>To: <span class="name">USER_NAME</span></span></div>
                   <div class="chat">PLACEHOLDER</div>

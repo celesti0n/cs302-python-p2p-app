@@ -81,7 +81,6 @@ class MainApp(object):
         except:
             return "You are not logged in. Click " + "<a href='/'>here</a> to login"
         data = data.replace("USERS_ONLINE", self.getList())
-        data = data.replace("LIST_OF_ONLINE_USERS", self.showList())
         data = data.replace("LIST_OF_TOTAL_USERS", self.listAllUsers())
         data = data.replace("RECEIVED_MESSAGE_LIST", self.displayReceivedMessage())
         data = data.replace("SENT_MESSAGE_LIST", self.displaySentMessage())
@@ -268,16 +267,20 @@ class MainApp(object):
 
     @cherrypy.expose
     @cherrypy.tools.json_in()
-    def getStatus(self): # other people call this to get my status
+    def getStatus(self): # other people call this to get access to my status table
         if LimitReached():
             return 'Error 11: Blacklisted or Rate Limited'
         else:
-            c = sqlite3.connect(DB_STRING)
-            cur = c.cursor()
-            cur.execute("SELECT status FROM user_status WHERE profile_username=?", [cherrypy.request.json['profile_username']])
-            credentials = cur.fetchone()
-            print("Someone grabbed your profile status!")
-            return json.dumps(credentials[0])  # return out a JSON encoded string
+            try:
+                c = sqlite3.connect(DB_STRING)
+                cur = c.cursor()
+                cur.execute("SELECT status FROM user_status WHERE profile_username=?", [cherrypy.request.json['profile_username']])
+                credentials = cur.fetchone()
+                print("Someone grabbed your profile status!")
+                return json.dumps(credentials[0])  # return out a JSON encoded string
+            except:  # apologise for not having the person the user wants
+                print("You tried to serve a status to someone, but you don't have that status")
+                return "Sorry, I don't have the status of the user you're looking for."
 
     @cherrypy.expose
     def setStatus(self, status):  # this function is called internally to set our own status, don't bother with JSON
@@ -335,41 +338,24 @@ class MainApp(object):
             # get conversation between somebody and the logged in user.
             c = sqlite3.connect(DB_STRING)
             cur = c.cursor()
-            cur.execute("SELECT sender, destination, msg FROM msg ORDER BY stamp ASC")
+            cur.execute("SELECT sender, destination, msg, markdown FROM msg ORDER BY stamp ASC")
             for row in cur:
-                if (username == row[0]):  # if the message belongs to the sender, call the div that styles left bubble
-                    conversation += '<div class="bubble you">'
-                    conversation += row[2] + '</div>'
-                elif (username == row[1]):  # if the message belongs to me, call right bubble
-                    conversation += '<div class="bubble me">'
-                    conversation += row[2] + '</div>'
-            return str(conversation)
+                if (row[3] == 0):  # not a markdown msg
+                    if (username == row[0]):  # if the message belongs to the sender, call the div that styles left bubble
+                        conversation += '<div class="bubble you">'
+                        conversation += row[2] + '</div>'
+                    elif (username == row[1]):  # if the message belongs to me, call right bubble
+                        conversation += '<div class="bubble me">'
+                        conversation += row[2] + '</div>'
+                else:
+                    markdowner = markdown.Markdown()
+                    if (username == row[0]):  # if the message belongs to the sender, call the div that styles left bubble
+                        conversation += '<div class="bubble you">'
+                        conversation += markdowner.convert(str(row[2])) + '</div>'
+                    elif (username == row[1]):  # if the message belongs to me, call right bubble
+                        conversation += '<div class="bubble me">'
+                        conversation += markdowner.convert(str(row[2])) + '</div>'
 
-    @cherrypy.expose
-    def getChatConvo(self, username='entry'):
-        conversation = ''
-        if (username == 'entry'):  # on first start of app, hardcode conversation
-            conversation += '<div class="bubble you">'
-            conversation += 'Welcome to fort secure chat!' + '</div>'
-            conversation += '<div class="bubble you">'
-            conversation += 'To start, choose a user to chat with on the left. Use the enter key to send.' + '</div>'
-            conversation += '<div class = "bubble you">'
-            conversation += 'You can also view user profiles and send/receive files, just use the top navigation bar.' + '</div>'
-            conversation += '<div class = "bubble you">'
-            conversation += 'Remember to wait 5-10 seconds for your message to appear after sending.' + '</div>'
-            return str(conversation)
-        else:
-            # get conversation between somebody and the logged in user.
-            c = sqlite3.connect(DB_STRING)
-            cur = c.cursor()
-            cur.execute("SELECT sender, destination, msg FROM msg ORDER BY stamp ASC")
-            for row in cur:
-                if (username == row[0]):  # if the message belongs to the sender, call the div that styles left bubble
-                    conversation += '<div class="bubble you">'
-                    conversation += row[2] + '</div>'
-                elif (username == row[1]):  # if the message belongs to me, call right bubble
-                    conversation += '<div class="bubble me">'
-                    conversation += row[2] + '</div>'
             return str(conversation)
 
     @cherrypy.expose
@@ -398,18 +384,6 @@ class MainApp(object):
             return "There are " + str(users_online) + " users online."
         else:
             return api_call
-
-    @cherrypy.expose
-    def showList(self):
-        c = sqlite3.connect(DB_STRING)
-        cur = c.cursor()
-        cur.execute("SELECT username FROM user_string")
-        user_list = cur.fetchall()
-        string = ''
-        for i in range(0, len(user_list)):
-            string += str(user_list[i][0]) + '<br />'
-        return string
-
 
     @cherrypy.expose
     def logoff(self):
@@ -460,21 +434,21 @@ class MainApp(object):
         else:  # continue on with life
             try:  # try to receive message with markdown encoding arg
                 with sqlite3.connect(DB_STRING) as c:
-                    c.execute("INSERT INTO msg(sender, destination, msg, stamp) VALUES (?,?,?,?)",
+                    c.execute("INSERT INTO msg(sender, destination, msg, stamp, markdown) VALUES (?,?,?,?,?)",
                     [cherrypy.request.json['sender'], cherrypy.request.json['destination'],
                      cherrypy.request.json['message'], cherrypy.request.json['stamp'], cherrypy.request.json['markdown']])
                 print "Message received from " + cherrypy.request.json['sender']
                 return '0'
             except:  # if it doesn't work, just store without the markdown encoding argument
                 with sqlite3.connect(DB_STRING) as c:
-                    c.execute("INSERT INTO msg(sender, destination, msg, stamp) VALUES (?,?,?,?)",
+                    c.execute("INSERT INTO msg(sender, destination, msg, stamp, markdown) VALUES (?,?,?,?)",
                     [cherrypy.request.json['sender'], cherrypy.request.json['destination'],
-                     cherrypy.request.json['message'], cherrypy.request.json['stamp']])
+                     cherrypy.request.json['message'], cherrypy.request.json['stamp'], 0])
                 print "Message received from " + cherrypy.request.json['sender']
                 return '0'
 
     @cherrypy.expose
-    def sendMessage(self, destination, message):
+    def sendMessage(self, destination, message, markdown):
         # look up the 'destination' user in database and retrieve his corresponding ip address and port
         c = sqlite3.connect(DB_STRING)
         cur = c.cursor()
@@ -487,7 +461,7 @@ class MainApp(object):
         else:
             try:  # try to send them a markdown formatted message
                 # message data must be encoded into JSON, message is converted to markdown
-                postdata = self.jsonEncodeMessage(cherrypy.session.get('username'), markdown.markdown(message), destination, int(time.time(),1))
+                postdata = self.jsonEncodeMessage(cherrypy.session.get('username'), message, destination, int(time.time(),int(markdown)))
                 req = urllib2.Request("http://" + ip + ":" + port + "/receiveMessage",
                                      postdata, {'Content-Type': 'application/json'})
                 try:
@@ -495,7 +469,7 @@ class MainApp(object):
                 except:
                     return "5: Timeout Error"
             except:  # if it doesn't work, try to send them a message without markdown (in jsonEncodeMessage, markdown is 0 by default)
-                postdata = self.jsonEncodeMessage(cherrypy.session.get('username'), message, destination, int(time.time()))
+                postdata = self.jsonEncodeMessage(cherrypy.session.get('username'), message, destination, int(time.time(), 0))
                 req = urllib2.Request("http://" + ip + ":" + port + "/receiveMessage",
                                      postdata, {'Content-Type': 'application/json'})
                 try:
@@ -505,8 +479,8 @@ class MainApp(object):
         if (response.find('0') != -1):  # successful
             print "Message sent to client: " + destination
             with sqlite3.connect(DB_STRING) as c:
-                c.execute("INSERT INTO msg(sender, destination, msg, stamp) VALUES (?,?,?,?)",
-                [cherrypy.session.get('username'), destination, message, int(time.time())])
+                c.execute("INSERT INTO msg(sender, destination, msg, stamp, markdown) VALUES (?,?,?,?,?)",
+                [cherrypy.session.get('username'), destination, message, int(time.time()), int(markdown)])
             raise cherrypy.HTTPRedirect("/home")
         else:
             return "something happened"
@@ -798,7 +772,7 @@ class MainApp(object):
             return messages
 
 
-    def jsonEncodeMessage(self, sender, message, destination, stamp, markdown=0):
+    def jsonEncodeMessage(self, sender, message, destination, stamp, markdown):
         output_dict = {"sender": sender, "message": message, "destination": destination, "stamp": stamp, "markdown": markdown}
         data = json.dumps(output_dict)
         return data

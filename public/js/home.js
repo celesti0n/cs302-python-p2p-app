@@ -18,12 +18,13 @@ $(document).ready(function() {
   $('.message-form').submit(function () {
     var msg = $('.message-form').find('input[name="message"]').val();
     var destination =  $('.right .top').find('.name').text();
+    var markdown = $('.message-form').find('select[name="markdown"]').val();
     console.log(msg)
     console.log(destination)
     $.ajax({
       type: 'POST',
-      url: './sendMessage?destination='+destination+'&message='+msg,
-      timeout: 5000,
+      url: './sendMessage?destination='+destination+'&message='+msg+'&markdown='+markdown,
+      timeout: 10000,
       success: function(e){
         $('.message-form').find('input[name="message"]').val("");
         alert("Message sent!");
