@@ -328,11 +328,13 @@ class MainApp(object):
             conversation += '<div class="bubble you">'
             conversation += 'Welcome to fort secure chat!' + '</div>'
             conversation += '<div class="bubble you">'
-            conversation += 'To start, choose a user to chat with on the left. Use the enter key to send.' + '</div>'
+            conversation += 'To start, choose a user to chat with on the left. <strong>Use the enter key to send.</strong>' + '</div>'
             conversation += '<div class = "bubble you">'
             conversation += 'You can also view user profiles and send/receive files, just use the top navigation bar.' + '</div>'
             conversation += '<div class = "bubble you">'
-            conversation += 'Remember to wait 5-10 seconds for your message to appear after sending.' + '</div>'
+            conversation += 'Remember to wait at least 10 seconds for your message to appear after sending.' + '</div>'
+            conversation += '<div class = "bubble you">'
+            conversation += 'You can choose to send your message <em>in </em><code>markdown </code>too.' + '</div>'
             return str(conversation)
         else:
             # get conversation between somebody and the logged in user.
@@ -422,9 +424,9 @@ class MainApp(object):
 
     @cherrypy.expose
     def listAPI(self):
-        return '/ping /listAPI /receiveMessage [sender] [destination] [message] [stamp] [markdown(opt)]' +\
-         '/getProfile [profile_username] [sender]' + \
-        ' /receiveFile [sender] [destination] [file] [filename] [content_type] [stamp] /getStatus [profile_username]'
+        return '/ping /listAPI /receiveMessage [sender] [destination] [message] [stamp] [markdown(opt)]' + \
+        '/getProfile [profile_username] [sender] /receiveFile [sender] [destination] [file] [filename]' + \
+        '[content_type] [stamp] /getStatus [profile_username]'
 
     @cherrypy.expose
     @cherrypy.tools.json_in()  # according to docs, all json input parameters stored in cherrypy.request.json
@@ -459,31 +461,42 @@ class MainApp(object):
         if not values_tuple:  # if either ip and port is empty
             return "3: Client Currently Unavailable"
         else:
-            try:  # try to send them a markdown formatted message
-                # message data must be encoded into JSON, message is converted to markdown
-                postdata = self.jsonEncodeMessage(cherrypy.session.get('username'), message, destination, int(time.time(),int(markdown)))
+            try:  # try to send them a message with markdown argument
+                output_dict = {"sender": cherrypy.session.get('username'), "message": message,
+                "destination": destination, "stamp": int(time.time()), "markdown": markdown}
+                postdata = json.dumps(output_dict)
                 req = urllib2.Request("http://" + ip + ":" + port + "/receiveMessage",
                                      postdata, {'Content-Type': 'application/json'})
                 try:
                     response = urllib2.urlopen(req).read()
+                    if (response.find('0') != -1):  # successful
+                        print "Markdown arg message sent to client: " + destination
+                        with sqlite3.connect(DB_STRING) as c:
+                            c.execute("INSERT INTO msg(sender, destination, msg, stamp, markdown) VALUES (?,?,?,?,?)",
+                            [cherrypy.session.get('username'), destination, message, int(time.time()), int(markdown)])
+                    else:
+                        return "4: Database Error"
                 except:
                     return "5: Timeout Error"
-            except:  # if it doesn't work, try to send them a message without markdown (in jsonEncodeMessage, markdown is 0 by default)
-                postdata = self.jsonEncodeMessage(cherrypy.session.get('username'), message, destination, int(time.time(), 0))
+            except:  # if it doesn't work, try to send them a message without markdown argument
+                output_dict = {"sender": cherrypy.session.get('username'), "message": message,
+                "destination": destination, "stamp": int(time.time())}
+                postdata = json.dumps(output_dict)
                 req = urllib2.Request("http://" + ip + ":" + port + "/receiveMessage",
                                      postdata, {'Content-Type': 'application/json'})
                 try:
                     response = urllib2.urlopen(req).read()
+                    if (response.find('0') != -1):  # successful
+                        print "Non-markdown arg message sent to client: " + destination
+                        with sqlite3.connect(DB_STRING) as c:
+                            c.execute("INSERT INTO msg(sender, destination, msg, stamp) VALUES (?,?,?,?)",  # no markdown arg
+                            [cherrypy.session.get('username'), destination, message, int(time.time())])
+                    else:
+                        return "4: Database Error"
                 except:
                     return "5: Timeout Error"
-        if (response.find('0') != -1):  # successful
-            print "Message sent to client: " + destination
-            with sqlite3.connect(DB_STRING) as c:
-                c.execute("INSERT INTO msg(sender, destination, msg, stamp, markdown) VALUES (?,?,?,?,?)",
-                [cherrypy.session.get('username'), destination, message, int(time.time()), int(markdown)])
             raise cherrypy.HTTPRedirect("/home")
-        else:
-            return "something happened"
+
 
     @cherrypy.expose
     @cherrypy.tools.json_in()  # profile_username and sender input is stored in cherrypy.request.json
@@ -773,8 +786,7 @@ class MainApp(object):
 
 
     def jsonEncodeMessage(self, sender, message, destination, stamp, markdown):
-        output_dict = {"sender": sender, "message": message, "destination": destination, "stamp": stamp, "markdown": markdown}
-        data = json.dumps(output_dict)
+
         return data
 
     def epochFormat(self, timeStamp):

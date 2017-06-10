@@ -32,11 +32,11 @@
               <form class='message-form' method = "post" action = "/sendMessage/">
               <input type="text" placeholder = "enter your message..." name = "message"/>
               <input type="hidden" value = "$('.right .top').find('.name').text();" name="destination" />
-              <select name = "markdown">
+              <select id = "markdown" name = "markdown">
                   <option value="0">Non-markdown</option>
                   <option value="1">Markdown</option>
               </select></form>
-              <button type="submit" class="write-link send">
+              <button type="submit" class="write-link send"></a>
 
           </div>
             <div class="top"><span>To: <span class="name">USER_NAME</span></span></div>

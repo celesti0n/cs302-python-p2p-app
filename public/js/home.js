@@ -18,9 +18,11 @@ $(document).ready(function() {
   $('.message-form').submit(function () {
     var msg = $('.message-form').find('input[name="message"]').val();
     var destination =  $('.right .top').find('.name').text();
+    $('#select option:selected').val();
     var markdown = $('.message-form').find('select[name="markdown"]').val();
     console.log(msg)
     console.log(destination)
+    console.log(markdown)
     $.ajax({
       type: 'POST',
       url: './sendMessage?destination='+destination+'&message='+msg+'&markdown='+markdown,
