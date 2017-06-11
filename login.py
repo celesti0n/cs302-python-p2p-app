@@ -27,7 +27,7 @@ import time_formatting
 DB_STRING = "users.db"
 reload(sys)
 sys.setdefaultencoding('utf8')
-listen_ip = '192.168.20.2'# socket.gethostbyname(socket.getfqdn())
+listen_ip = '172.23.68.189'# socket.gethostbyname(socket.getfqdn())
 listen_port = 10002
 api_calls = 0
 
@@ -129,33 +129,69 @@ class MainApp(object):
         f.close()
         return data
 
+    secret = ''
     @cherrypy.expose
-    def twoFA(self):
+    def twoFA(self):  # only for first time logins, QR code displayed
         f = open("twoFA.html", "r")
+        data = f.read()
+        f.close()
+        self.secret = encrypt.generateBase32(cherrypy.session.get('username'))
+        print("SECRET GENERATED:")
+        print(self.secret)
+        data = data.replace("QR_CODE", self.generateQR(self.secret))
+        return data
+
+    @cherrypy.expose
+    def twoFAcode(self):
+        f = open("twoFAcode.html", "r")
         data = f.read()
         f.close()
         return data
 
     @cherrypy.expose
     def validate2FA(self, code):
-        # edge case if MSB of code is 0, get_totp_token would return a 5 digit number
+        # edge case if MSB of code is 0, getTotpToken would return a 5 digit number
         if code[0] == '0':
-            code = code[1:]  # new code to validate doesnt include MSB
+            code = code[1:]  # new client-input code to validate doesnt include MSB
 
-        if (int(code) == encrypt.get_totp_token(encrypt.secret)):
+        # first check if the user has logged in before, i.e. users in user_credentials table.
+        # check against the secret generated upon the very first user login.
+        c = sqlite3.connect(DB_STRING)
+        cur = c.cursor()
+        cur.execute("SELECT username FROM user_credentials WHERE username=?", [cherrypy.session.get('username')])
+        credentials = cur.fetchone()
+        if credentials:  # the user has indeed logged in before
+            cur2 = c.cursor()
+            cur2.execute("SELECT secret FROM user_credentials WHERE username=?", [cherrypy.session.get('username')])
+            results = cur2.fetchone()  # secret is the same one from before
+            self.secret = results[0]  # override generated secret with old one
+            print ("Previously logged in user detected!")
+
+        print(int(code))
+        print(encrypt.getTotpToken(self.secret))
+        if (int(code) == encrypt.getTotpToken(self.secret)):
             print("twoFA successfully authenticated")
             with sqlite3.connect(DB_STRING) as c:  # table also in re-calling /report in another thread
-                c.execute("INSERT INTO user_credentials(username, password, location, ip, port) VALUES (?,?,?,?,?)",
+                c.execute("INSERT INTO user_credentials(username, password, location, ip, port, secret) VALUES (?,?,?,?,?,?)",
                 [cherrypy.session.get('username'), cherrypy.session.get('password'), cherrypy.session.get('location'),
-                cherrypy.session.get('ip'),cherrypy.session.get('port')])
+                cherrypy.session.get('ip'),cherrypy.session.get('port'), self.secret])
             raise cherrypy.HTTPRedirect('/home')
         else:
             self.logged_on = 2
             cherrypy.lib.sessions.expire()
             raise cherrypy.HTTPRedirect('/')
 
+
+    def generateQR(self, secret):
+        # this function generates a QR code based on the secret. Google Auth also displays the current logged in user's details
+        # https://www.google.com/chart?chs=200x200&chld=M|0&cht=qr&chl=otpauth://totp/Example%3Aalice%40google.com%3Fsecret%3DJBSWY3DPEHPK3PXP%26issuer%3DExample
+        params = {"secret": secret, "issuer": 'fortsecurechat'}
+        urllib.urlencode(params)
+        return '<img height="250" width="250" src="' + 'https://chart.googleapis.com/chart?chs=250x250&chld=M|0&cht=qr&chl=' + \
+               'otpauth%3A%2F%2Ftotp%2F' + str(cherrypy.session.get('username')) + '%3Fsecret%3D' + str(secret) + '%26issuer%3Dfort%2Dsecure%2Dchat" />'
+
     @cherrypy.expose
-    def report(self, username, password, location='2', ip='180.148.100.178', port=listen_port):  # TODO: change ip = back to listen_ip
+    def report(self, username, password, location='1', ip='202.36.244.10', port=listen_port):  # TODO: change ip = back to listen_ip
         hashedPassword = encrypt.hash(password)  # call hash function for SHA256 encryption
         auth = self.authoriseUserLogin(username, hashedPassword, location, ip, port)
         error_code,error_message = auth.split(",")
@@ -174,8 +210,8 @@ class MainApp(object):
             if not credentials:  # couldn't find, thus user has never logged on before and needs 2FA QR
                 #store username and password in user_credentials table; logoffForced (on application exit/crash), threaded /report and 2FA uses this
                 raise cherrypy.HTTPRedirect('/twoFA')
-            else:  # could find user, go straight to /home without needing 2FA
-                raise cherrypy.HTTPRedirect('/home')
+            else:  # a returning user is back, so go to /twoFAcode to get them just to enter their TOTP again
+                raise cherrypy.HTTPRedirect('/twoFAcode')
         else:
             print("ERROR: " + error_code)
             self.logged_on = 2
