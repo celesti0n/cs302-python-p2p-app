@@ -226,9 +226,9 @@ body {
 .container .right .chat {
   overflow-y: scroll;
   overflow-x: hidden;
-  height: calc(100% - 82px);
-  padding-top: 20px;
-  padding-bottom: 10px;
+  height: calc(100% - 95px);
+  padding-top: 25px;
+  padding-bottom: 30px;
   padding-right: 25px;
   padding-left: 25px;
   display: block;
@@ -382,7 +382,6 @@ colour must also be switched between white and black respectively to maintain re
   outline: 0;
   background: #f2f2f2; /*color of button*/
   border: 0;
-  text-indent: -9999px;
   border-radius: 10px;
   margin-left: 15px;
   background-image: url("http://www.dliflc.edu/wp-content/themes/DLIFLC/images/icon-find.png"); /*some magnifying glass looking thing*/
@@ -393,6 +392,7 @@ colour must also be switched between white and black respectively to maintain re
   -webkit-transition: all 0.3 ease;
   transition: all 0.3 ease;
   cursor: pointer;
+  color: rgba(0, 0, 0, 0); 
 }
 /*Styling for edit profile*/
 .profile-form input {

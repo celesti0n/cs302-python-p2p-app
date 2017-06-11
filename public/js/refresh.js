@@ -22,4 +22,8 @@ $(document).ready(function () {
         }
       }, 10000);
 
+	setInterval(function() {
+	 $('.chat').animate({
+        scrollTop: $('.wrapper')[0].scrollHeight //scroll to the bottom of the messaging screen when clicked
+    }, 3000);
 });

@@ -9,6 +9,7 @@ import socket
 import sys
 import datetime
 import base64
+sys.path.insert(0, './Markdown')
 import markdown
 import threading
 
@@ -27,7 +28,7 @@ import time_formatting
 DB_STRING = "users.db"
 reload(sys)
 sys.setdefaultencoding('utf8')
-listen_ip = '172.23.68.189'# socket.gethostbyname(socket.getfqdn())
+listen_ip = socket.gethostbyname(socket.getfqdn())
 listen_port = 10002
 api_calls = 0
 
@@ -53,7 +54,7 @@ def LimitReached():  # this function will return True if limit reached/user has 
     global api_calls
     api_calls = api_calls + 1
     print('Current calls:' + str(api_calls))
-    if (api_calls > 14):  # if 15 people have called my functions within 60 seconds
+    if (api_calls > 30):  # if 30 people have called my functions within 60 seconds
         print("Rate limit activated, a user was blocked from your API")
         return True  #  block the request and return Error 11: Blacklisted or Rate Limited (done in other funcs)
     else:
@@ -184,14 +185,13 @@ class MainApp(object):
 
     def generateQR(self, secret):
         # this function generates a QR code based on the secret. Google Auth also displays the current logged in user's details
-        # https://www.google.com/chart?chs=200x200&chld=M|0&cht=qr&chl=otpauth://totp/Example%3Aalice%40google.com%3Fsecret%3DJBSWY3DPEHPK3PXP%26issuer%3DExample
         params = {"secret": secret, "issuer": 'fortsecurechat'}
         urllib.urlencode(params)
         return '<img height="250" width="250" src="' + 'https://chart.googleapis.com/chart?chs=250x250&chld=M|0&cht=qr&chl=' + \
                'otpauth%3A%2F%2Ftotp%2F' + str(cherrypy.session.get('username')) + '%3Fsecret%3D' + str(secret) + '%26issuer%3Dfort%2Dsecure%2Dchat" />'
 
     @cherrypy.expose
-    def report(self, username, password, location='1', ip='202.36.244.10', port=listen_port):  # TODO: change ip = back to listen_ip
+    def report(self, username, password, location='0', ip=listen_ip, port=listen_port): 
         hashedPassword = encrypt.hash(password)  # call hash function for SHA256 encryption
         auth = self.authoriseUserLogin(username, hashedPassword, location, ip, port)
         error_code,error_message = auth.split(",")
@@ -443,9 +443,9 @@ class MainApp(object):
                 return '0'
             except:  # if it doesn't work, just store without the markdown encoding argument
                 with sqlite3.connect(DB_STRING) as c:
-                    c.execute("INSERT INTO msg(sender, destination, msg, stamp, markdown) VALUES (?,?,?,?)",
+                    c.execute("INSERT INTO msg(sender, destination, msg, stamp) VALUES (?,?,?,?)",
                     [cherrypy.request.json['sender'], cherrypy.request.json['destination'],
-                     cherrypy.request.json['message'], cherrypy.request.json['stamp'], 0])
+                     cherrypy.request.json['message'], cherrypy.request.json['stamp']])
                 print "Message received from " + cherrypy.request.json['sender']
                 return '0'
 
